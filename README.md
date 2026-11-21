@@ -23,20 +23,57 @@ Agent（Termux / Debian / Ubuntu / 树莓派 / 任意 Linux）
 
 ## 1. 安装
 
+### 一行命令（推荐）
+
+```bash
+curl -fsSL https://cdn.jsdelivr.net/gh/hahahaoha/termux-mcp-remote@main/get.sh | bash
+```
+
+国内网络如果 jsDelivr 慢，可以换源：
+
+```bash
+# GitHub 直连
+curl -fsSL https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
+
+# 走代理
+curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
+```
+
+脚本会依次尝试 codeload → ghproxy → ghfast → github 下载代码包，任何一个通就行。
+Node.js 缺失时在 Termux 上会自动 `pkg install nodejs-lts`（Linux 会提示安装方法）。
+
+常用参数：
+
+```bash
+# 装到指定目录
+bash get.sh --dir /opt/termux-mcp-remote
+
+# 更新现有安装
+bash get.sh --dir ~/termux-mcp-remote
+
+# 跳过 npm install（依赖已装好）
+bash get.sh --no-deps
+
+# 确认要覆盖另一个位置的 tmcp 命令
+bash get.sh --dir /opt/new --force
+```
+
+> **安全保护**：如果检测到已有另一个位置的安装，脚本会**中止并且不改动任何文件**，
+> 而不是悄悄覆盖你的 `tmcp` 命令。
+
+### 手动安装
+
+```bash
+git clone https://github.com/hahahaoha/termux-mcp-remote.git
+cd termux-mcp-remote
+npm install
+bash install.sh              # 安装 tmcp 命令
+```
+
 需要 Node.js >= 20。
 
-**Termux**
-```bash
-pkg install -y nodejs-lts util-linux npm
-cd ~/termux-mcp-remote && npm install && bash install.sh
-```
-
-**Debian / Ubuntu / 其他 Linux**
-```bash
-sudo apt install -y nodejs npm util-linux
-cd ~/termux-mcp-remote && npm install && bash install.sh
-# 如果 /usr/local/bin 不可写，会装到 ~/.local/bin（记得加进 PATH）
-```
+**Termux**：`pkg install -y nodejs-lts util-linux`
+**Debian/Ubuntu**：`sudo apt install -y nodejs npm util-linux`
 
 `util-linux` 提供 `script` 命令，交互式 PTY 需要它；不装则只有 `shell_*` 工具不可用。
 
