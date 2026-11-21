@@ -1,0 +1,18 @@
+{
+  "name": "termux-mcp-remote-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker side of termux-mcp-remote: MCP endpoint, multi-device tunnel (Durable Objects), web admin UI and optional OAuth.",
+  "main": "index.js",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^3.25.76"
+  },
+  "private": true
+}

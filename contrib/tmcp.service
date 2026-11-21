@@ -1,0 +1,22 @@
+[Unit]
+Description=termux-mcp-remote agent (remote MCP tunnel)
+Documentation=https://github.com/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__ROOT__
+# 由 tmcp start 拉起守护进程；systemd 负责开机和崩溃重启
+ExecStart=/usr/bin/env node __ROOT__/agent/supervisor.js
+Restart=always
+RestartSec=5
+# 守护进程自己会写日志到 ~/.config/termux-mcp-remote/logs/
+StandardOutput=journal
+StandardError=journal
+# 稍微放宽，避免大量并发调用被限制
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

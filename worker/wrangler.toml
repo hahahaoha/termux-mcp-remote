@@ -1,0 +1,33 @@
+name = "termux-mcp"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# Durable Object：隧道 / 运行时可改设置 / OAuth 令牌
+[durable_objects]
+bindings = [
+  { name = "AGENT_HUB", class_name = "AgentHub" },
+  { name = "SETTINGS", class_name = "Settings" },
+  { name = "AUTH_STORE", class_name = "AuthStore" },
+  { name = "ADMIN_AUTH", class_name = "AdminAuth" },
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AgentHub", "AuthStore"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Settings"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["AdminAuth"]
+
+[observability]
+enabled = true
+
+# 让 Worker 能读到自己的版本 ID：部署后 Agent 可据此自动重连到新代码
+[version_metadata]
+binding = "CF_VERSION"

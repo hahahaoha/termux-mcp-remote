@@ -1,0 +1,40 @@
+{
+  "name": "termux-mcp-remote",
+  "version": "1.0.0",
+  "description": "Self-hosted remote MCP server: let an AI drive your own machine's terminal (Termux / Debian / any Linux), tunnelled through your own Cloudflare Worker with header-based auth.",
+  "type": "module",
+  "main": "agent/daemon.js",
+  "bin": {
+    "tmcp": "./bin/tmcp"
+  },
+  "scripts": {
+    "start": "node agent/cli.js start",
+    "stop": "node agent/cli.js stop",
+    "status": "node agent/cli.js status",
+    "setup": "node agent/cli.js setup",
+    "deploy": "node agent/cli.js deploy",
+    "test": "node agent/cli.js test",
+    "local": "node local/local-server.js",
+    "worker:dev": "npm --prefix worker run dev",
+    "worker:deploy": "npm --prefix worker run deploy"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^3.25.76"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hahahaoha/termux-mcp-remote.git"
+  },
+  "keywords": [
+    "mcp",
+    "termux",
+    "cloudflare-worker",
+    "remote-shell",
+    "ai-agent"
+  ]
+}

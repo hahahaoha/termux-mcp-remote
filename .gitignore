@@ -1,0 +1,23 @@
+# 依赖
+node_modules/
+
+# 本地配置与运行时数据（含 AUTH_TOKEN / AGENT_TOKEN，绝不提交）
+config.json
+*.pid
+run/
+logs/
+state/
+*.log
+
+# Cloudflare 本地状态
+.wrangler/
+.dev.vars
+worker/.wrangler/
+worker/.dev.vars
+
+# 系统/编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

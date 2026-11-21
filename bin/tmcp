@@ -1,0 +1,5 @@
+#!/data/data/com.termux/files/usr/bin/env bash
+# termux-mcp-remote 的启动入口
+set -e
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec node "$ROOT/agent/cli.js" "$@"
