@@ -20,6 +20,7 @@ export const DEFAULTS = {
   deviceId: "",
   maxShells: 6,
   shellIdleMs: 30 * 60 * 1000,
+  enrolledAt: null,       // 通过注册码配置的时间（null = 手动配置）
 };
 
 export function ensureDirs() {

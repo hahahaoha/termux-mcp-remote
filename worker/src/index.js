@@ -17,10 +17,11 @@ import { AgentHub } from "./hub.js";
 import { AuthStore } from "./auth.js";
 import { Settings } from "./settings.js";
 import { AdminAuth } from "./admin-auth.js";
+import { EnrollStore } from "./enroll.js";
 import { ADMIN_HTML } from "./admin-html.js";
 import { checkToken } from "./crypto.js";
 
-export { AgentHub, AuthStore, Settings, AdminAuth };
+export { AgentHub, AuthStore, Settings, AdminAuth, EnrollStore };
 
 const HUB_NAME = "hub-v4";
 
@@ -65,6 +66,29 @@ export default {
           "x-frame-options": "DENY",
           "referrer-policy": "no-referrer",
         },
+      });
+    }
+
+    // ---------- 一次性注册码 ----------
+    // /api/enroll/redeem 必须公开：此时设备还没有任何凭证，这个码就是它唯一的身份证明
+    if (path === "/api/enroll/redeem") {
+      if (request.method !== "POST") return json({ ok: false, error: "method not allowed" }, 405);
+      const body = await request.json().catch(() => ({}));
+      const settings = await getSettings(env);
+      return enrollStub(env).fetch("https://enroll/redeem", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        // 关键：token 在兑换这一刻现取，不存进 DO
+        body: JSON.stringify({
+          code: body.code,
+          deviceId: body.deviceId,
+          name: body.name,
+          inject: {
+            workerUrl: new URL(request.url).origin,
+            authToken: settings.authToken,
+            agentToken: settings.agentToken,
+          },
+        }),
       });
     }
 
@@ -205,6 +229,27 @@ async function handleAdminApi(request, env, settings, path) {
         lines: Number(body.lines) || 200,
       }, 25000, body.device);
       return json({ ok: res.ok, text: res.ok ? res.text : res.error });
+    }
+
+    case "/api/admin/enroll/create": {
+      const ttl = Number(body.ttlSec) || 600;
+      return enrollStub(env).fetch("https://enroll/create", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ttlSec: ttl, hint: body.hint || "" }),
+      });
+    }
+
+    case "/api/admin/enroll/list": {
+      return enrollStub(env).fetch("https://enroll/list");
+    }
+
+    case "/api/admin/enroll/revoke": {
+      return enrollStub(env).fetch("https://enroll/revoke", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: body.id }),
+      });
     }
 
     case "/api/admin/default-device": {
@@ -361,6 +406,9 @@ function hubStub(env) {
 }
 function settingsStub(env) {
   return env.SETTINGS.get(env.SETTINGS.idFromName("default"));
+}
+function enrollStub(env) {
+  return env.ENROLL.get(env.ENROLL.idFromName("default"));
 }
 function adminAuthStub(env) {
   return env.ADMIN_AUTH.get(env.ADMIN_AUTH.idFromName("default"));

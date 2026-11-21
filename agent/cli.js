@@ -64,6 +64,7 @@ async function main() {
     case "panel": return panel();
     case "domain": return domainCmd();
     case "admin-pass": case "passwd": return adminPassCmd();
+    case "enroll": return enrollCmd();
     case "help": case "-h": case "--help": return help();
     case "-v": case "--version": return version();
     default:
@@ -150,6 +151,7 @@ ${C.b}用法${C.r}
   tmcp panel           本地应急面板（只监听 127.0.0.1；日常用 Worker 的 /admin）
   tmcp domain          给 Worker 绑定自有域名（解决 workers.dev 被污染）
   tmcp admin-pass      设置 / 重置后台登录密码（与 API token 无关）
+  tmcp enroll [地址] [注册码]   用一次性注册码一键配置（地址+密钥）
 
 ${C.b}典型流程${C.r}
   tmcp deploy      ${C.dim}# 一次性，部署 Worker 并生成 token${C.r}
@@ -212,7 +214,18 @@ async function setup({ force = false } = {}) {
   }
 
   hr("配置向导");
-  console.log("这一步只需要填 Worker 地址。它由「tmcp deploy」部署后给出，形如：");
+  console.log(`有注册码的话最省事：在 Worker 后台点「生成配置码」，然后把码粘进来，`);
+  console.log(`${C.dim}地址和两个 token 会自动填好，不用手抄。${C.r}`);
+  console.log("");
+  const first = await ask("注册码（没有就按回车，手动填地址）", { def: "" });
+  if (first) {
+    closeRl();
+    await enrollCmd({ code: first, fromSetup: true });
+    return;
+  }
+
+  console.log("");
+  console.log("手动配置。Worker 地址由「tmcp deploy」部署后给出，形如：");
   tip("   https://termux-mcp.你的账号.workers.dev");
   tip("   或你自己的域名：https://mcp.example.com");
   console.log("");
@@ -799,6 +812,70 @@ async function panel() {
     process.on("SIGINT", () => { server.close(); resolve(); });
     process.on("SIGTERM", () => { server.close(); resolve(); });
   });
+}
+
+// ============================ enroll ============================
+// 用一次性注册码完成配置：地址 + AUTH_TOKEN + AGENT_TOKEN 一次到位。
+// 支持三种写法：
+//   tmcp enroll                    交互式粘贴（自动识别是否带地址前缀）
+//   tmcp enroll <注册码>
+//   tmcp enroll <Worker地址> <注册码>
+async function enrollCmd(opts = {}) {
+  const { extractCode, enrollAndSave, looksLikeCode } = await import("./enroll.js");
+  const cfg = loadConfig();
+
+  let hint = opts.code || "";
+  let urlHint = "";
+
+  // 从命令行参数里解析（opts.code 为空时）
+  if (!hint) {
+    const a1 = args[1] && !args[1].startsWith("-") ? args[1] : "";
+    const a2 = args[2] && !args[2].startsWith("-") ? args[2] : "";
+    if (a1 && a2) { urlHint = a1; hint = a2; }
+    else if (a1) {
+      // 一个参数：可能是码，也可能是地址（带 "/enroll/<码>"）
+      if (looksLikeCode(a1)) hint = a1;
+      else urlHint = a1;
+    }
+  }
+
+  if (!opts.fromSetup) hr("用注册码配置");
+  if (!hint) {
+    console.log(`${C.dim}在 Worker 后台（${cfg.workerUrl || "你的 Worker"}/admin）点「生成配置码」，`);
+    console.log(`复制那串码，直接粘到这里。${C.r}`);
+    hint = await ask("注册码", { def: "" });
+    closeRl();
+  }
+  const code = extractCode(hint);
+  if (!code) { bad("这不是有效的注册码"); return; }
+
+  // 地址优先级：命令行 > 注册码里带的 > 已有配置 > 追问
+  let base = urlHint || cfg.workerUrl || "";
+  if (!base) {
+    console.log(`${C.dim}还需要 Worker 地址（注册码只含随机数，不含地址时需手填一次）。${C.r}`);
+    base = await ask("Worker 地址", { def: "" });
+    closeRl();
+  }
+  if (!base) { bad("缺少 Worker 地址"); return; }
+
+  process.stdout.write(`${C.dim}正在兑换…${C.r}\n`);
+  try {
+    const saved = await enrollAndSave({ code, workerUrl: base });
+    good(`配置完成：${saved.workerUrl}`);
+    tip(`AUTH_TOKEN  ${saved.authToken.slice(0, 6)}…${saved.authToken.slice(-4)}`);
+    tip(`AGENT_TOKEN ${saved.agentToken.slice(0, 6)}…${saved.agentToken.slice(-4)}`);
+    tip("这串注册码已经作废，不能再用第二次");
+  } catch (e) {
+    bad(e.message || String(e));
+    if (e.reason === "used") tip("一个注册码只能用一次；请回后台重新生成。");
+    else if (e.reason === "expired") tip("注册码有时效，过期了就在后台重新生成一个。");
+    else if (e.reason === "notfound") tip("码无效、已被撤销或已过期。");
+    return;
+  }
+
+  const go = await ask("\n现在启动 Agent？(Y/n)", { def: "Y" });
+  closeRl();
+  if (!/^n/i.test(go)) await start();
 }
 
 // ============================ admin-pass ============================

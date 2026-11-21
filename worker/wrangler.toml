@@ -11,6 +11,7 @@ bindings = [
   { name = "SETTINGS", class_name = "Settings" },
   { name = "AUTH_STORE", class_name = "AuthStore" },
   { name = "ADMIN_AUTH", class_name = "AdminAuth" },
+  { name = "ENROLL", class_name = "EnrollStore" },
 ]
 
 [[migrations]]
@@ -24,6 +25,10 @@ new_sqlite_classes = ["Settings"]
 [[migrations]]
 tag = "v3"
 new_sqlite_classes = ["AdminAuth"]
+
+[[migrations]]
+tag = "v4"
+new_sqlite_classes = ["EnrollStore"]
 
 [observability]
 enabled = true

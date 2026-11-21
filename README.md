@@ -53,6 +53,35 @@ tmcp deploy
 3. 部署 Worker（含 Durable Object）
 4. 把地址和 token 存到 `~/.config/termux-mcp-remote/config.json`（600）
 
+### 给新设备一键配置（配置码）
+
+再也不用抄地址和密钥了。在后台 `https://<worker>/admin` → 「配置码」→ 生成，
+然后在设备上：
+
+```bash
+tmcp enroll                    # 交互式，直接粘贴那串码
+tmcp enroll <注册码>            # 码里带了地址时
+tmcp enroll <地址> <注册码>      # 地址和码分开给
+```
+
+一条命令把 `workerUrl` / `AUTH_TOKEN` / `AGENT_TOKEN` 全部写好。
+`tmcp setup` 的第一个问题也会问注册码，粘进去就完事。
+
+**它为什么安全：**
+
+| 属性 | 实现 |
+| --- | --- |
+| 码里不含密钥 | 只有 Worker 地址 + 32 字节随机数；密钥在兑换那一刻才由 Worker 现取注入 |
+| 服务端不存明文 | Durable Object 里存的是码的 SHA-256 哈希，拿到存储快照也还原不出码 |
+| 一次性 | 兑换成功即标记 `used`，再用返回 410 |
+| 有时效 | 默认 10 分钟（可选 5 分钟 ~ 1 小时），过期记录直接删除 |
+| 过期不可复原 | 记录被删 + 码本身不含密钥，过了有效期就是一串无用字符 |
+| 可撤销 | 后台可随时撤销单个码；同时最多 20 个有效码 |
+| 轮换友好 | 因为密钥是兑换时现取的，轮换 AUTH_TOKEN 后旧码兑换出来的也是新值 |
+
+> 码长得像乱码（例如 `m9_7uxtsDdGbc_PyMiTu9Ut0…`），是 base64url 编码的随机数。
+> 只显示一次，页面刷新后就看不到了——需要就重新生成。
+
 ### 如果 `*.workers.dev` 访问不了
 
 国内网络下 `*.workers.dev` 常被 DNS 污染。绑自有域名：
@@ -144,6 +173,7 @@ tmcp admin-pass      # 输入留空 = 清除密码，下次访问重新引导
 - **看日志**：agent.log / supervisor.log / agent.err.log，可选行数
 - **强制重连**：某台设备连接卡住时
 - **改默认设备**：MCP 不传 `device` 时用哪台
+- **生成配置码**：给新设备用，一次性 + 倒计时 + 可撤销
 - **修改后台密码**：需要先输入当前密码
 - **轮换 AUTH_TOKEN**：自动生成或自定义，立即生效
 - **轮换 AGENT_TOKEN**：同样立即生效（之后要更新各设备配置）
@@ -209,6 +239,7 @@ tmcp status          本地 + Worker + 各设备
 tmcp logs -f         跟日志
 tmcp test            自检
 tmcp doctor          环境体检
+tmcp enroll [地址] [注册码]   用一次性配置码一键配置
 tmcp admin-pass      设置 / 重置后台登录密码
 tmcp token           查看 token
 tmcp token sync      从 Worker 拉回当前 token（WebUI 轮换后用）
@@ -308,5 +339,7 @@ node scripts/remote-test.mjs http://127.0.0.1:29200/mcp <AUTH_TOKEN>
   —— 三设备同时在线、按 device 路由、不存在设备报错、单设备断开不影响其他
 - `scripts/admin-auth-test.mjs`：**18 项全通过**
   —— 首次设置、HttpOnly/SameSite cookie、密码与 token 互不通用、伪造会话被拒、改密后旧会话失效
+- `scripts/enroll-test.mjs`：**28 项全通过**
+  —— 生成、兑换、一次性、过期即焚、撤销、TTL 钳制、码内不含密钥、列表不泄漏明文
 - WebUI DOM 测试（jsdom）：**25 项全通过**
   —— 登录门、设备卡渲染、凭证打码/显示、主题切换、标签页、设备详情查询、控制台无错误

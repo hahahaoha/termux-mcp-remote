@@ -264,6 +264,52 @@ pre:empty::before{content:"（空）";color:var(--muted)}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 #toast.bad{border-color:color-mix(in srgb,var(--bad) 45%,transparent);color:var(--bad)}
 
+/* ---------- 配置码 ---------- */
+.codebox{
+  position:relative;overflow:hidden;
+  background:linear-gradient(135deg,
+    color-mix(in srgb,var(--acc) 9%, var(--input)),
+    color-mix(in srgb,var(--acc2) 9%, var(--input)));
+  border:1px solid color-mix(in srgb,var(--acc) 28%, var(--line));
+  border-radius:var(--r-md);padding:16px 17px;
+  animation:codeIn .5s var(--ease) both;
+}
+@keyframes codeIn{from{opacity:0;transform:scale(.97) translateY(6px)}to{opacity:1;transform:none}}
+.codebox::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(340px 90px at 12% 0%, color-mix(in srgb,var(--acc) 20%,transparent), transparent 70%);
+}
+.codelabel{font-size:11px;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;margin-bottom:9px}
+.codeval{
+  font:12.5px/1.75 ui-monospace,SFMono-Regular,Menlo,monospace;
+  word-break:break-all;color:var(--fg);user-select:all;
+  letter-spacing:.3px;
+  /* 让它"看起来是乱码"但又可读 */
+  text-shadow:0 0 18px color-mix(in srgb,var(--acc) 35%,transparent);
+}
+.codemt{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:11.5px;color:var(--muted)}
+.codemt b{color:var(--fg2);font-weight:500}
+.timer{font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,monospace}
+.timer.warn{color:var(--warn)}
+.timer.dead{color:var(--bad)}
+.bar{height:3px;border-radius:2px;background:color-mix(in srgb,var(--fg) 10%,transparent);margin-top:12px;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:2px;background:linear-gradient(90deg,var(--acc),var(--acc2));
+  transition:width 1s linear;width:100%}
+.enroll-list{list-style:none;margin:12px 0 0;padding:0}
+.enroll-list li{
+  display:flex;align-items:center;gap:9px;padding:8px 0;
+  border-bottom:1px solid var(--line);font-size:12px;
+  animation:fadeUp .3s var(--ease) both;
+}
+.enroll-list li:last-child{border:none}
+.enroll-list .st{font-size:10.5px;padding:1px 7px;border-radius:999px;border:1px solid;flex:none}
+.st.active{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent);
+  background:color-mix(in srgb,var(--ok) 10%,transparent)}
+.st.used{color:var(--muted);border-color:var(--line)}
+.st.expired{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 30%,transparent)}
+.enroll-list .id{font-family:ui-monospace,Menlo,monospace;color:var(--muted);flex:none}
+.enroll-list .sp{flex:1}
+
 /* ---------- 骨架 ---------- */
 .skel{height:82px;border-radius:var(--r-md);border:1px solid var(--line);
   background:linear-gradient(100deg,transparent 20%,color-mix(in srgb,var(--fg) 7%,transparent) 40%,transparent 60%);
@@ -323,6 +369,32 @@ pre:empty::before{content:"（空）";color:var(--muted)}
       <div class="tight"><button id="btn-reveal">显示完整凭证</button></div>
       <div class="tight"><button id="btn-copy">复制配置</button></div>
     </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><i class="pip"></i><h2>配置码</h2>
+      <span class="chip" id="enroll-count">0</span>
+    </div>
+    <div class="hint" style="margin-top:0">
+      给新设备用：生成一串码，在设备上执行 <code>tmcp enroll</code> 粘进去即可，
+      不用手抄地址和密钥。<b>一次性</b>，到期自动失效，且过期后无法再解出任何内容。
+    </div>
+    <div id="code-area" style="margin-top:13px"></div>
+    <div class="row" style="margin-top:11px">
+      <div><label>有效期</label>
+        <select id="sel-ttl">
+          <option value="300">5 分钟</option>
+          <option value="600" selected>10 分钟</option>
+          <option value="1800">30 分钟</option>
+          <option value="3600">1 小时</option>
+        </select>
+      </div>
+      <div><label>备注（可选，方便区分设备）</label>
+        <input id="inp-hint" placeholder="例如：Debian VPS">
+      </div>
+      <div class="tight"><button class="primary" id="btn-gen">生成配置码</button></div>
+    </div>
+    <div id="enroll-history"></div>
   </section>
 
   <section class="card">
@@ -413,6 +485,9 @@ pre:empty::before{content:"（空）";color:var(--muted)}
   "use strict";
   var $=function(id){return document.getElementById(id)};
   var state={devices:[],defaultDevice:null,worker:null,authPreview:"",agentPreview:""};
+  var activeCode=null;    // { code, expiresAt, ttlSec, hint }
+  var codeTimer=null;
+  var enrollItems=[];
   var revealed=null;      // 点"显示"后缓存的完整凭证
   var toastT=null, loggedIn=false, needSetup=false;
 
@@ -668,6 +743,119 @@ pre:empty::before{content:"（空）";color:var(--muted)}
     renderEndpoint();
     renderCreds();
     renderPwState();
+    renderEnrollHistory();
+  }
+
+  // ---------- 配置码 ----------
+  function fmtLeft(sec){
+    if(sec<=0) return "已过期";
+    var m=Math.floor(sec/60), s=sec%60;
+    return m>0 ? (m+" 分 "+(s<10?"0":"")+s+" 秒") : (s+" 秒");
+  }
+
+  function renderActiveCode(){
+    var box=$("code-area");
+    if(!activeCode){
+      box.innerHTML='<div style="padding:18px;text-align:center;color:var(--muted);font-size:12.5px;'+
+        'border:1px dashed var(--line);border-radius:var(--r-md)">'+
+        '点下方「生成配置码」</div>';
+      return;
+    }
+    var left=Math.max(0,Math.round((activeCode.expiresAt-Date.now())/1000));
+    var pct=Math.max(0,Math.min(100,(left/activeCode.ttlSec)*100));
+    box.innerHTML=
+      '<div class="codebox">'
+      +'<div class="codelabel">粘贴到设备上的 tmcp enroll</div>'
+      +'<div class="codeval" id="code-text">'+esc(activeCode.code)+'</div>'
+      +'<div class="codemt">'
+        +'<span>剩余 <b class="timer'+(left<=60?" warn":"")+(left<=0?" dead":"")+'" id="code-timer">'+fmtLeft(left)+'</b></span>'
+        +(activeCode.hint?'<span>备注 <b>'+esc(activeCode.hint)+'</b></span>':'')
+        +'<span>一次性 · 用后作废</span>'
+      +'</div>'
+      +'<div class="bar"><i id="code-bar" style="width:'+pct+'%"></i></div>'
+      +'</div>'
+      +'<div class="row" style="margin-top:10px">'
+        +'<div class="tight"><button id="btn-copycode">复制</button></div>'
+        +'<div class="tight"><button class="danger" id="btn-clearcode">收起</button></div>'
+      +'</div>';
+    var cp=$("btn-copycode");
+    if(cp) cp.onclick=async function(){
+      try{ await navigator.clipboard.writeText(activeCode.code); toast("已复制，粘贴到设备即可"); }
+      catch(e){ toast("复制失败，请手动选中",true); }
+    };
+    var cc=$("btn-clearcode");
+    if(cc) cc.onclick=function(){ activeCode=null; stopCodeTimer(); renderActiveCode(); };
+  }
+
+  function stopCodeTimer(){ if(codeTimer){ clearInterval(codeTimer); codeTimer=null; } }
+
+  function startCodeTimer(){
+    stopCodeTimer();
+    codeTimer=setInterval(function(){
+      if(!activeCode) return stopCodeTimer();
+      var left=Math.round((activeCode.expiresAt-Date.now())/1000);
+      var t=$("code-timer"), b=$("code-bar");
+      if(t){
+        t.textContent=fmtLeft(left);
+        t.className="timer"+(left<=60?" warn":"")+(left<=0?" dead":"");
+      }
+      if(b) b.style.width=Math.max(0,Math.min(100,(left/activeCode.ttlSec)*100))+"%";
+      if(left<=0){
+        // 到期即视为失效：把码本身也抹掉，避免有人继续复制
+        stopCodeTimer();
+        activeCode=null;
+        renderActiveCode();
+        toast("配置码已过期，请重新生成",true);
+        loadEnrollList();
+      }
+    },1000);
+  }
+
+  function renderEnrollHistory(){
+    var box=$("enroll-history");
+    var list=(enrollItems||[]).filter(function(x){return x.state!=="expired"});
+    if(!list.length){ box.innerHTML=""; return; }
+    box.innerHTML='<div class="codelabel" style="margin:16px 0 4px">最近的码</div>'
+      +'<ul class="enroll-list">'+list.map(function(x){
+        var label=x.state==="used"?"已用":(x.state==="active"?"有效":"过期");
+        var when=x.state==="used"&&x.usedAt
+          ? new Date(x.usedAt).toLocaleTimeString("zh-CN")
+          : (x.state==="active"?fmtLeft(x.remainingSec)+"后过期":"");
+        return '<li>'
+          +'<span class="st '+x.state+'">'+label+'</span>'
+          +'<span class="id">'+esc(x.id.slice(0,8))+'</span>'
+          +'<span class="sp">'+esc(x.hint||x.usedName||"")+'</span>'
+          +'<span style="color:var(--muted);font-size:11.5px">'+esc(when)+'</span>'
+          +(x.state==="active"?'<button class="danger" data-revoke="'+esc(x.id)+'" style="font-size:11px;padding:2px 8px">撤销</button>':'')
+          +'</li>';
+      }).join("")+'</ul>';
+  }
+
+  async function loadEnrollList(){
+    try{
+      var j=await api("/api/admin/enroll/list");
+      enrollItems=j.items||[];
+      $("enroll-count").textContent=enrollItems.filter(function(x){return x.state==="active"}).length+" 个有效";
+      renderEnrollHistory();
+    }catch(e){}
+  }
+
+  async function generateCode(){
+    var ttl=Number($("sel-ttl").value)||600;
+    var hint=$("inp-hint").value.trim();
+    var btn=$("btn-gen");
+    btn.disabled=true; btn.textContent="生成中…";
+    try{
+      var j=await api("/api/admin/enroll/create",{body:{ttlSec:ttl,hint:hint}});
+      if(!j.ok) throw new Error(j.error||"失败");
+      activeCode={code:j.code,expiresAt:j.expiresAt,ttlSec:j.ttlSec,hint:hint};
+      $("inp-hint").value="";
+      renderActiveCode();
+      startCodeTimer();
+      loadEnrollList();
+      toast("已生成，复制后粘到设备上");
+    }catch(e){ toast(e.message,true); }
+    finally{ btn.disabled=false; btn.textContent="生成配置码"; }
   }
 
   // ---------- 数据 ----------
@@ -693,6 +881,19 @@ pre:empty::before{content:"（空）";color:var(--muted)}
     }else if(act==="log"){
       $("tab-logs").click(); $("sel-dev-logs").value=id; $("btn-logs").click();
     }
+  });
+
+  $("btn-gen").onclick=generateCode;
+
+  document.addEventListener("click",function(ev){
+    var b=ev.target.closest("button[data-revoke]");
+    if(!b) return;
+    var id=b.getAttribute("data-revoke");
+    if(!confirm("撤销这个配置码？撤销后立刻失效。")) return;
+    api("/api/admin/enroll/revoke",{body:{id:id}}).then(function(){
+      toast("已撤销"); loadEnrollList();
+      if(activeCode){ activeCode=null; stopCodeTimer(); renderActiveCode(); }
+    }).catch(function(e){toast(e.message,true)});
   });
 
   $("btn-refresh").onclick=function(){
@@ -799,6 +1000,7 @@ pre:empty::before{content:"（空）";color:var(--muted)}
   // 自动刷新（仅在已登录时）
   setInterval(function(){ if(loggedIn) load().catch(function(){}); },15000);
 
+  renderActiveCode();
   checkAuth();
 })();
 </script></body></html>`;
