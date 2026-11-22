@@ -136,7 +136,7 @@ function warn(s) { console.log(`${C.y}!${C.r} ${s}`); }
 function bad(s) { console.log(`${C.red}✗${C.r} ${s}`); }
 
 function help() {
-  console.log(t("{0}termux-mcp-remote{1} —— 用 Cloudflare Worker 远程使用 Termux 终端\n\n{2}用法{3}\n  tmcp                 交互式菜单\n  tmcp setup           配置向导（首次使用）\n  tmcp deploy          用 wrangler 部署 Worker 并自动写入密钥\n  tmcp start           后台启动 Agent（守护进程）\n  tmcp stop            停止 Agent\n  tmcp status          查看连接状态\n  tmcp logs [-f]       查看日志\n  tmcp token [rotate]  查看 / 轮换访问令牌\n  tmcp url <地址>      修改 Worker 地址\n  tmcp test            本地自检（MCP 握手 + 工具调用）\n  tmcp doctor          环境体检\n  tmcp panel           本地应急面板（只监听 127.0.0.1；日常用 Worker 的 /admin）\n  tmcp domain          给 Worker 绑定自有域名（解决 workers.dev 被污染）\n  tmcp admin-pass      设置 / 重置后台登录密码（与 API token 无关）\n  tmcp enroll [地址] [注册码]   用一次性注册码一键配置（地址+密钥）\n\n{4}典型流程{5}\n  tmcp deploy      {6}# 一次性，部署 Worker 并生成 token{7}\n  tmcp setup       {8}# 确认地址（直接回车用刚部署的）{9}\n  tmcp start       {10}# 让手机连上 Worker{11}\n\n{12}客户端配置{13}\n  URL:      https://<你的-worker>/mcp\n  请求头:   Authorization: Bearer <AUTH_TOKEN>\n", C.b, C.r, C.b, C.r, C.b, C.r, C.dim, C.r, C.dim, C.r, C.dim, C.r, C.b, C.r));
+  console.log(t("{0}termux-mcp-remote{1} —— 用 Cloudflare Worker 远程使用 Termux 终端\n\n{2}用法{3}\n  tmcp                 交互式菜单\n  tmcp setup           配置向导（首次使用）\n  tmcp deploy          用 wrangler 部署 Worker 并自动写入密钥\n  tmcp start           后台启动 Agent（守护进程）\n  tmcp stop            停止 Agent\n  tmcp status          查看连接状态\n  tmcp logs [-f]       查看日志\n  tmcp token [rotate]  查看 / 轮换访问令牌\n  tmcp url <地址>      修改 Worker 地址\n  tmcp test            本地自检（MCP 握手 + 工具调用）\n  tmcp doctor          环境体检\n  tmcp panel           本地应急面板（只监听 127.0.0.1；日常用 Worker 的 /admin）\n  tmcp domain          给 Worker 绑定自有域名（解决 workers.dev 被污染）\n  tmcp admin-pass      设置 / 重置后台登录密码（与 API token 无关）\n  tmcp enroll [地址] [配置码]   用一次性配置码一键配置（地址+密钥）\n\n{4}典型流程{5}\n  tmcp deploy      {6}# 一次性，部署 Worker 并生成 token{7}\n  tmcp setup       {8}# 确认地址（直接回车用刚部署的）{9}\n  tmcp start       {10}# 让手机连上 Worker{11}\n\n{12}客户端配置{13}\n  URL:      https://<你的-worker>/mcp\n  请求头:   Authorization: Bearer <AUTH_TOKEN>\n", C.b, C.r, C.b, C.r, C.b, C.r, C.dim, C.r, C.dim, C.r, C.dim, C.r, C.b, C.r));
   console.log(t("  tmcp lang [en|zh]    切换界面语言"));
 }
 
@@ -190,10 +190,10 @@ async function setup({ force = false } = {}) {
   }
 
   hr(t("配置向导"));
-  console.log(t("有注册码的话最省事：在 Worker 后台点「生成配置码」，然后把码粘进来，"));
+  console.log(t("有配置码的话最省事：在 Worker 后台点「生成配置码」，然后把码粘进来，"));
   console.log(t("{0}地址和两个 token 会自动填好，不用手抄。{1}", C.dim, C.r));
   console.log("");
-  const first = await ask(t("注册码（没有就按回车，手动填地址）"), { def: "" });
+  const first = await ask(t("配置码（粘进去就行，地址和密钥都在里面）"), { def: "" });
   if (first) {
     closeRl();
     await enrollCmd({ code: first, fromSetup: true });
@@ -790,6 +790,18 @@ async function panel() {
   });
 }
 
+// 把 host 中间一段打码，避免在终端里直接暴露完整地址
+function maskHost(url) {
+  try {
+    const u = new URL(url);
+    const parts = u.hostname.split(".");
+    if (parts.length <= 2) return u.hostname[0] + "***" + u.hostname.slice(-2);
+    return parts[0] + ".***." + parts.slice(-2).join(".");
+  } catch {
+    return "***";
+  }
+}
+
 // ============================ lang ============================
 // 切换 tmcp 的界面语言。安装脚本也会写同一个文件（~/.config/termux-mcp-remote/lang）。
 async function langCmd() {
@@ -817,7 +829,7 @@ async function langCmd() {
 //   tmcp enroll <注册码>
 //   tmcp enroll <Worker地址> <注册码>
 async function enrollCmd(opts = {}) {
-  const { extractCode, enrollAndSave, looksLikeCode } = await import("./enroll.js");
+  const { parseEnroll, enrollAndSave } = await import("./enroll.js");
   const cfg = loadConfig();
 
   let hint = opts.code || "";
@@ -828,27 +840,28 @@ async function enrollCmd(opts = {}) {
     const a1 = args[1] && !args[1].startsWith("-") ? args[1] : "";
     const a2 = args[2] && !args[2].startsWith("-") ? args[2] : "";
     if (a1 && a2) { urlHint = a1; hint = a2; }
-    else if (a1) {
-      // 一个参数：可能是码，也可能是地址（带 "/enroll/<码>"）
-      if (looksLikeCode(a1)) hint = a1;
-      else urlHint = a1;
-    }
+    else if (a1) hint = a1;
   }
 
-  if (!opts.fromSetup) hr(t("用注册码配置"));
+  if (!opts.fromSetup) hr(t("用配置码配置"));
   if (!hint) {
     console.log(t("{0}在 Worker 后台（{1}/admin）点「生成配置码」，", C.dim, cfg.workerUrl || t("你的 Worker")));
-    console.log(t("复制那串码，直接粘到这里。{0}", C.r));
-    hint = await ask(t("注册码"), { def: "" });
+    console.log(t("复制那串码，直接粘到这里——地址和密钥都在里面，不用再填别的。{0}", C.r));
+    hint = await ask(t("配置码"), { def: "" });
     closeRl();
   }
-  const code = extractCode(hint);
-  if (!code) { bad(t("这不是有效的注册码")); return; }
 
-  // 地址优先级：命令行 > 注册码里带的 > 已有配置 > 追问
-  let base = urlHint || cfg.workerUrl || "";
+  const parsed = parseEnroll(hint);
+  if (parsed.broken) { bad(t("配置码不完整，可能复制时漏了字符，请重新复制")); return; }
+  if (!parsed.code) { bad(t("这不是有效的配置码")); return; }
+
+  // 地址优先级：命令行参数 > 码里自带的 > 已有配置 > 追问
+  let base = urlHint || parsed.workerUrl || cfg.workerUrl || "";
+  if (parsed.workerUrl) {
+    tip(t("已从码中识别到 Worker：{0}", maskHost(parsed.workerUrl)));
+  }
   if (!base) {
-    console.log(t("{0}还需要 Worker 地址（注册码只含随机数，不含地址时需手填一次）。{1}", C.dim, C.r));
+    console.log(t("{0}这个码里没有地址，需要手动填一次 Worker 地址。{1}", C.dim, C.r));
     base = await ask(t("Worker 地址"), { def: "" });
     closeRl();
   }
@@ -856,15 +869,15 @@ async function enrollCmd(opts = {}) {
 
   process.stdout.write(t("{0}正在兑换…{1}\n", C.dim, C.r));
   try {
-    const saved = await enrollAndSave({ code, workerUrl: base });
+    const saved = await enrollAndSave({ code: parsed.code, workerUrl: base });
     good(t("配置完成：{0}", saved.workerUrl));
     tip(`AUTH_TOKEN  ${saved.authToken.slice(0, 6)}…${saved.authToken.slice(-4)}`);
     tip(`AGENT_TOKEN ${saved.agentToken.slice(0, 6)}…${saved.agentToken.slice(-4)}`);
-    tip(t("这串注册码已经作废，不能再用第二次"));
+    tip(t("这串配置码已经作废，不能再用第二次"));
   } catch (e) {
     bad(e.message || String(e));
-    if (e.reason === "used") tip(t("一个注册码只能用一次；请回后台重新生成。"));
-    else if (e.reason === "expired") tip(t("注册码有时效，过期了就在后台重新生成一个。"));
+    if (e.reason === "used") tip(t("一个配置码只能用一次；请回后台重新生成。"));
+    else if (e.reason === "expired") tip(t("配置码有时效，过期了就在后台重新生成一个。"));
     else if (e.reason === "notfound") tip(t("码无效、已被撤销或已过期。"));
     return;
   }

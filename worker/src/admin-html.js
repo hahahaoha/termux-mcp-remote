@@ -765,7 +765,7 @@ pre:empty::before{content:"（空）";color:var(--muted)}
     var pct=Math.max(0,Math.min(100,(left/activeCode.ttlSec)*100));
     box.innerHTML=
       '<div class="codebox">'
-      +'<div class="codelabel">粘贴到设备上的 tmcp enroll</div>'
+      +'<div class="codelabel">粘到设备上的 tmcp enroll（已含地址与密钥）</div>'
       +'<div class="codeval" id="code-text">'+esc(activeCode.code)+'</div>'
       +'<div class="codemt">'
         +'<span>剩余 <b class="timer'+(left<=60?" warn":"")+(left<=0?" dead":"")+'" id="code-timer">'+fmtLeft(left)+'</b></span>'
@@ -848,7 +848,7 @@ pre:empty::before{content:"（空）";color:var(--muted)}
     try{
       var j=await api("/api/admin/enroll/create",{body:{ttlSec:ttl,hint:hint}});
       if(!j.ok) throw new Error(j.error||"失败");
-      activeCode={code:j.code,expiresAt:j.expiresAt,ttlSec:j.ttlSec,hint:hint};
+      activeCode={code:(j.link||j.code),expiresAt:j.expiresAt,ttlSec:j.ttlSec,hint:hint};
       $("inp-hint").value="";
       renderActiveCode();
       startCodeTimer();

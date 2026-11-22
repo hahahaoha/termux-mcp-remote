@@ -37,7 +37,7 @@ export class EnrollStore {
   }
 
   // ---------------- 生成 ----------------
-  async create({ ttlSec, hint } = {}) {
+  async create({ ttlSec, hint, origin } = {}) {
     await this.purge();
     const active = (await this.records()).filter((r) => !r.usedAt && r.expiresAt > Date.now());
     if (active.length >= MAX_ACTIVE) {
@@ -62,7 +62,8 @@ export class EnrollStore {
     await this.state.storage.put(PREFIX + hash, rec);
     return json({
       ok: true,
-      code,                       // 明文只在这一刻返回给浏览器，之后无处可查
+      code,                       // 裸码：只含 32 字节随机数
+      link: makeLink(origin, code), // 自包含：把 Worker 地址也编进去，粘一次就够
       id: rec.id,
       expiresAt: rec.expiresAt,
       ttlSec: ttl,
@@ -171,6 +172,19 @@ function clampTtl(v) {
   const n = Number(v);
   if (!Number.isFinite(n) || n <= 0) return DEFAULT_TTL_SEC;
   return Math.min(Math.max(Math.round(n), 60), MAX_TTL_SEC);
+}
+
+// 自包含配置码：tmcp1_ + base64url({v,h,c})
+//   h = Worker 地址（公开信息，编码后不直接可见）
+//   c = 32 字节随机码（真正的凭证）
+// 只是编码不是加密——地址本来就是公开的，密钥从不进这个字符串。
+const LINK_PREFIX = "tmcp1_";
+
+function makeLink(origin, code) {
+  const host = String(origin || "").replace(/\/+$/, "");
+  if (!host) return "";
+  const payload = JSON.stringify({ v: 1, h: host, c: code });
+  return LINK_PREFIX + bytesToB64url(new TextEncoder().encode(payload));
 }
 
 function randomCode() {

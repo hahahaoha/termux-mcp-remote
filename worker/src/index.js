@@ -236,7 +236,12 @@ async function handleAdminApi(request, env, settings, path) {
       return enrollStub(env).fetch("https://enroll/create", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ttlSec: ttl, hint: body.hint || "" }),
+        // origin 传下去，DO 才能生成自带地址的配置码
+        body: JSON.stringify({
+          ttlSec: ttl,
+          hint: body.hint || "",
+          origin: new URL(request.url).origin,
+        }),
       });
     }
 

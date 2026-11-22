@@ -81,6 +81,15 @@ try {
   check("返回注册码", typeof code === "string" && code.length >= 20, `长度 ${code?.length}`);
   check("码是 URL-safe 乱码样式", /^[A-Za-z0-9_-]+$/.test(code));
   check("不包含 token 片段", !code.includes(AUTH_TOKEN.slice(0, 8)));
+
+  console.log("\n== 3b. 自包含配置码 ==");
+  check("返回可粘贴的 link", typeof gen.link === "string" && gen.link.startsWith("tmcp1_"), String(gen.link).slice(0, 20));
+  const link = gen.link;
+  const host = new URL(BASE).host;
+  check("link 里看不到域名", !link.includes(host) && !link.includes("://"));
+  const linkData = JSON.parse(Buffer.from(link.replace(/^tmcp1_/, ""), "base64url").toString("utf8"));
+  check("link 能解出地址", linkData.h === new URL(BASE).origin, linkData.h);
+  check("link 能解出同一个码", linkData.c === code);
   check("返回过期时间", typeof gen.expiresAt === "number" && gen.expiresAt > Date.now());
   check("默认有效期约 10 分钟", Math.abs((gen.expiresAt - Date.now()) / 1000 - 600) < 10);
 
@@ -92,7 +101,7 @@ try {
     `实际 ${Buffer.from(code, "base64url").length} 字节`);
 
   console.log("\n== 5. 正常兑换 ==");
-  const r1 = await redeem(code);
+  const r1 = await redeem(linkData.c);
   check("兑换成功", r1.status === 200 && r1.body.ok === true, JSON.stringify(r1.body).slice(0, 150));
   check("返回 workerUrl", typeof r1.body.config?.workerUrl === "string" && r1.body.config.workerUrl.startsWith("http"));
   check("返回 authToken", typeof r1.body.config?.authToken === "string" && r1.body.config.authToken.length > 20);

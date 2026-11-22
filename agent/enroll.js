@@ -8,14 +8,37 @@
 import { loadConfig, saveConfig, normalizeUrl, isConfigured } from "./config.js";
 
 const ENROLL_RE = /^[A-Za-z0-9_-]{20,200}$/;
+const LINK_PREFIX = "tmcp1_";
 
-// 从任意文本里提取注册码（允许粘贴时带空格/换行/引号）
-export function extractCode(raw) {
-  const s = String(raw || "").trim().replace(/^["'`]|["'`]$/g, "");
-  if (ENROLL_RE.test(s)) return s;
-  // 也允许 "tmcp enroll <code>" 或 URL 形式
+// 解析粘贴进来的东西。两种情况都支持：
+//   tmcp1_xxx          自包含码：解出 Worker 地址 + 随机码，一次粘贴搞定
+//   xxxxxxxxxxxx       裸码：只有随机码，需要另外提供地址（兼容旧码）
+export function parseEnroll(raw) {
+  let s = String(raw || "").trim().replace(/^["'`]|["'`]$/g, "");
+  // 粘贴时常带上换行/空格，先去掉
+  s = s.replace(/\s+/g, "");
+
+  if (s.startsWith(LINK_PREFIX)) {
+    try {
+      const json = Buffer.from(s.slice(LINK_PREFIX.length), "base64url").toString("utf8");
+      const o = JSON.parse(json);
+      if (o && typeof o.c === "string" && typeof o.h === "string") {
+        return { code: o.c, workerUrl: o.h, selfContained: true };
+      }
+    } catch { }
+    return { code: "", workerUrl: "", selfContained: true, broken: true };
+  }
+
+  if (ENROLL_RE.test(s)) return { code: s, workerUrl: "", selfContained: false };
+
+  // 也允许 "tmcp enroll <code>" 之类
   const m = /(?:enroll[\/\s]+|code=)([A-Za-z0-9_-]{20,200})/.exec(s);
-  return m ? m[1] : "";
+  return { code: m ? m[1] : "", workerUrl: "", selfContained: false };
+}
+
+// 从任意文本里提取注册码（兼容旧调用）
+export function extractCode(raw) {
+  return parseEnroll(raw).code;
 }
 
 export function looksLikeCode(raw) {
@@ -24,9 +47,12 @@ export function looksLikeCode(raw) {
 
 // 用注册码向 Worker 兑换配置。返回 { ok, config } 或抛错
 export async function redeemCode({ code, workerUrl, name, deviceId, signal }) {
-  const cleaned = extractCode(code);
-  if (!cleaned) throw new Error("这不像一个注册码（长度或字符不合法）");
-  const base = normalizeUrl(workerUrl);
+  const parsed = parseEnroll(code);
+  if (parsed.broken) throw new Error("配置码不完整，可能复制时漏了字符，请重新复制");
+  const cleaned = parsed.code;
+  if (!cleaned) throw new Error("这不像一个配置码（长度或字符不合法）");
+  // 地址优先级：显式传入 > 码里自带的
+  const base = normalizeUrl(workerUrl) || normalizeUrl(parsed.workerUrl);
   if (!base) throw new Error("需要先知道 Worker 地址：tmcp enroll <地址> <注册码>");
 
   const r = await fetch(`${base}/api/enroll/redeem`, {
