@@ -40,21 +40,28 @@ curl -fsSL https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/ge
 ```
 
 > **关于下载源**：上面用的是 GitHub raw，拿到的永远是最新版本。
-> 如果 GitHub 访问不了，可以换 jsDelivr **并带上 commit hash**（不能用 `@main`，
-> jsDelivr 对分支有 12 小时缓存，期间会拿到旧脚本）：
+> 如果 GitHub 访问不了，推荐用 gh-proxy（国内速度最好，实测 0.9 秒）：
 >
 > ```bash
-> # 把 <hash> 换成仓库最新 commit（GitHub 页面右上角可复制）
+> curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
+> ```
+>
+> 注意代理域名是 **`gh-proxy.org`**，`gh-proxy.com` 只是官网，直接拿它拼路径会返回 403。
+>
+> 其他可用的源：
+>
+> ```bash
+> # ghproxy（较慢但稳定）
+> curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
+>
+> # ghfast
+> curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
+>
+> # jsDelivr —— 必须带 commit hash，不能用 @main（分支有 12 小时缓存）
 > curl -fsSL https://cdn.jsdelivr.net/gh/hahahaoha/termux-mcp-remote@<hash>/get.sh | bash
 > ```
->
-> 或者走代理：
->
-> ```bash
-> curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
-> ```
 
-脚本内部会依次尝试 codeload → ghproxy → ghfast → github 下载代码包，任何一个通就行，
+脚本内部会依次尝试 codeload → gh-proxy → ghproxy → ghfast → github 下载代码包，任何一个通就行，
 所以即使拉脚本用的是代理，后续也能自动走可用的源。
 Node.js 缺失时在 Termux 上会自动 `pkg install nodejs-lts`（Linux 会提示安装方法）。
 

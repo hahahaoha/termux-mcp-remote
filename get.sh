@@ -10,7 +10,7 @@
 #   --dir <path>        install directory (default: ~/termux-mcp-remote)
 #   --branch <name>     git branch to install (default: main)
 #   --mirror <name>     force one download source:
-#                       codeload | ghproxy | ghfast | github
+#                       codeload | gh-proxy | ghproxy | ghfast | github
 #   --no-deps           skip npm install
 #   --force             take over a tmcp command that points elsewhere
 #   TMCP_DIR=...        same as --dir
@@ -68,7 +68,7 @@ Options:
   --dir <path>      Install directory (default: ~/termux-mcp-remote)
   --branch <name>   Git branch (default: main)
   --mirror <name>   Force one download source:
-                    codeload | ghproxy | ghfast | github
+                    codeload | gh-proxy | ghproxy | ghfast | github
   --no-deps         Skip npm install
   --force           Take over a tmcp command pointing at another install
   --lang <en|zh>    Chinese output: use get-zh.sh instead
@@ -228,6 +228,7 @@ ENC_BRANCH=$(printf '%s' "$BRANCH" | sed 's|/|%2F|g')
 # Note: jsDelivr cannot serve tarballs (404 for @main); it is only used to
 # fetch this script quickly, not the code archive.
 try_mirror "codeload" "https://codeload.github.com/$REPO/tar.gz/refs/heads/$ENC_BRANCH" || \
+try_mirror "gh-proxy" "https://gh-proxy.org/https://github.com/$REPO/archive/refs/heads/$ENC_BRANCH.tar.gz" || \
 try_mirror "ghproxy"  "https://ghproxy.net/https://github.com/$REPO/archive/refs/heads/$ENC_BRANCH.tar.gz" || \
 try_mirror "ghfast"   "https://ghfast.top/https://github.com/$REPO/archive/refs/heads/$ENC_BRANCH.tar.gz" || \
 try_mirror "github"   "https://github.com/$REPO/archive/refs/heads/$ENC_BRANCH.tar.gz" || true

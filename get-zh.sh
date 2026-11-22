@@ -9,7 +9,7 @@
 # 参数 / 环境变量：
 #   --dir <路径>       安装目录（默认 ~/termux-mcp-remote）
 #   --branch <分支>    要安装的 git 分支（默认 main）
-#   --mirror <名字>    强制使用某个下载源：codeload | ghproxy | ghfast | github
+#   --mirror <名字>    强制使用某个下载源：codeload | gh-proxy | ghproxy | ghfast | github
 #   --no-deps          跳过 npm install
 #   --force            接管已指向其他位置的 tmcp 命令
 #   TMCP_DIR=...       同 --dir
@@ -64,7 +64,7 @@ termux-mcp-remote - 一键安装（中文版）
   --dir <路径>      安装目录（默认 ~/termux-mcp-remote）
   --branch <分支>   git 分支（默认 main）
   --mirror <名字>   强制使用某个下载源：
-                    codeload | ghproxy | ghfast | github
+                    codeload | gh-proxy | ghproxy | ghfast | github
   --no-deps         跳过 npm install
   --force           接管已指向其他位置的 tmcp 命令
   -h, --help        显示本帮助
@@ -216,6 +216,7 @@ try_mirror() {
 ENC_BRANCH=$(printf '%s' "$BRANCH" | sed 's|/|%2F|g')
 # 注意：jsDelivr 不能提供 tarball（对 @main 会 404），它只用于加速获取本脚本。
 try_mirror "codeload" "https://codeload.github.com/$REPO/tar.gz/refs/heads/$ENC_BRANCH" || \
+try_mirror "gh-proxy" "https://gh-proxy.org/https://github.com/$REPO/archive/refs/heads/$ENC_BRANCH.tar.gz" || \
 try_mirror "ghproxy"  "https://ghproxy.net/https://github.com/$REPO/archive/refs/heads/$ENC_BRANCH.tar.gz" || \
 try_mirror "ghfast"   "https://ghfast.top/https://github.com/$REPO/archive/refs/heads/$ENC_BRANCH.tar.gz" || \
 try_mirror "github"   "https://github.com/$REPO/archive/refs/heads/$ENC_BRANCH.tar.gz" || true
