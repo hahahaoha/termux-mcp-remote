@@ -63,6 +63,25 @@ curl -fsSL https://cdn.jsdelivr.net/gh/hahahaoha/termux-mcp-remote@<hash>/get.sh
 的顺序自动回退，所以只要有一个源通就能装完。
 Node.js 缺失时在 Termux 上会自动 `pkg install nodejs-lts`（Linux 会提示安装方法）。
 
+**环境依赖会自动装**，不用自己配：
+
+| 依赖 | Termux | Debian / Ubuntu | Alpine / Fedora / Arch | macOS |
+| --- | --- | --- | --- | --- |
+| `curl` `tar` | `pkg` | `apt` | 各自包管理器 | 系统自带 |
+| Node.js ≥ 20 | `pkg install nodejs-lts` | `apt install nodejs` | 各自包管理器 | `brew` |
+| Node 太旧时 | — | **nvm 装到 `~/.nvm`**（不需要 root） | 同左 | 同左 |
+| `util-linux`（交互式 shell 用） | `pkg` | `apt` | 各自包管理器 | 自带 |
+
+- 需要 root 时用 `sudo -n`（免密才用），装不了就明确告诉你怎么装，不会静默跳过
+- 装完的 `tmcp` 启动器里写的是 **node 的绝对路径**，所以即使 Node 是用 nvm 装的、没配进 PATH，`tmcp` 也能直接跑
+- 不想让脚本碰系统包就加 `--no-system-deps`
+- 想先看它要装什么（不改动任何东西）就 `TMCP_DRY_RUN=1 bash get.sh`
+
+```bash
+# 预览
+curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | TMCP_DRY_RUN=1 bash
+```
+
 常用参数（`get-zh.sh` 与 `get.sh` 完全相同）：
 
 ```bash
@@ -74,6 +93,9 @@ bash get.sh --dir ~/termux-mcp-remote
 
 # 跳过 npm install（依赖已装好）
 bash get.sh --no-deps
+
+# 不动系统包，只提示缺什么
+bash get.sh --no-system-deps
 
 # 指定下载源
 bash get.sh --mirror gh-proxy
