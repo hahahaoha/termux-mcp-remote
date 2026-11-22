@@ -315,6 +315,13 @@ if ! command -v script >/dev/null 2>&1; then
   if [ "$PLATFORM" = "termux" ]; then dim "  pkg install util-linux"; else dim "  sudo apt install util-linux"; fi
 fi
 
+# ---------- record the UI language ----------
+# tmcp and the agent read this file, so an English install stays English.
+LANG_DIR="$HOME/.config/termux-mcp-remote"
+mkdir -p "$LANG_DIR" 2>/dev/null || true
+printf 'en\n' > "$LANG_DIR/lang" 2>/dev/null && chmod 600 "$LANG_DIR/lang" 2>/dev/null || true
+ok "UI language set to English (change later with: tmcp lang zh)"
+
 # ---------- 8. done ----------
 printf '\n%s%sInstallation complete%s\n' "$B$G" "" "$R"
 printf '  directory  %s\n' "$TARGET_DIR"

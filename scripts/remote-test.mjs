@@ -10,6 +10,7 @@ const url = process.argv[2] || `${cfg.workerUrl}/mcp`;
 const token = process.argv[3] || cfg.authToken;
 
 let pass = 0, fail = 0;
+const safeJson = (t) => { try { return JSON.parse(t); } catch { return null; } };
 const failures = [];
 
 function check(name, cond, detail = "") {
@@ -57,7 +58,9 @@ try {
 
   console.log("\n== list_devices ==");
   const st = await client.callTool({ name: "list_devices", arguments: {} });
-  const stJson = JSON.parse(text(st));
+  const stParsed = safeJson(text(st));
+  check("list_devices 返回 JSON", !!stParsed, text(st).slice(0, 120));
+  const stJson = stParsed || {};
   check("有设备在线", Array.isArray(stJson.devices) && stJson.devices.length > 0, JSON.stringify(stJson).slice(0,200));
   check("报告设备名", !!(stJson.devices?.[0]?.name));
 

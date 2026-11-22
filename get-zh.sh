@@ -303,6 +303,13 @@ if ! command -v script >/dev/null 2>&1; then
   if [ "$PLATFORM" = "termux" ]; then dim "  pkg install util-linux"; else dim "  sudo apt install util-linux"; fi
 fi
 
+# ---------- 记录界面语言 ----------
+# tmcp 与 Agent 都读这个文件，所以中文安装后续全是中文。
+LANG_DIR="$HOME/.config/termux-mcp-remote"
+mkdir -p "$LANG_DIR" 2>/dev/null || true
+printf 'zh\n' > "$LANG_DIR/lang" 2>/dev/null && chmod 600 "$LANG_DIR/lang" 2>/dev/null || true
+ok "界面语言已设为中文（可随时用 tmcp lang en 切换）"
+
 # ---------- 8. 完成 ----------
 printf '\n%s%s安装完成%s\n' "$B$G" "" "$R"
 printf '  目录  %s\n' "$TARGET_DIR"

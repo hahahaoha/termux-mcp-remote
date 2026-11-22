@@ -68,6 +68,12 @@ EOF
 chmod 755 "$BIN_DIR/tmcp"
 ok "Installed $BIN_DIR/tmcp" "已安装 $BIN_DIR/tmcp"
 
+# --- record the UI language for tmcp / the agent ---
+mkdir -p "$HOME/.config/termux-mcp-remote" 2>/dev/null || true
+if [ "$ZH" = 1 ]; then printf 'zh\n'; else printf 'en\n'; fi > "$HOME/.config/termux-mcp-remote/lang" 2>/dev/null || true
+chmod 600 "$HOME/.config/termux-mcp-remote/lang" 2>/dev/null || true
+ok "UI language: $([ "$ZH" = 1 ] && echo zh || echo en)" "界面语言: $([ "$ZH" = 1 ] && echo 中文 || echo English)"
+
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) warn "$BIN_DIR is not in PATH, add it to your shell profile" "$BIN_DIR 不在 PATH 里，请把它加进 shell 配置" ;;

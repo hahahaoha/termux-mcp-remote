@@ -2,6 +2,7 @@
 // 守护进程：把 Agent 作为子进程运行，异常退出时自动重启。
 // Android 上进程可能被系统回收，靠这个 + Termux:Boot 保证长期可用。
 import { spawn } from "node:child_process";
+import { t } from "./i18n.js";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -39,12 +40,12 @@ function startChild() {
     cwd: path.dirname(__dirname),
     env: { ...process.env },
   });
-  log(`启动 Agent pid=${child.pid}（第 ${restarts + 1} 次）`);
+  log(t("启动 Agent pid={0}（第 {1} 次）", child.pid, restarts + 1));
 
   child.on("exit", (code, signal) => {
     child = null;
     if (stopping) {
-      log("Agent 已停止，守护进程退出");
+      log(t("Agent 已停止，守护进程退出"));
       cleanupAndExit(0);
       return;
     }
@@ -54,12 +55,12 @@ function startChild() {
     else restarts++;
 
     if (restarts >= 10) {
-      log(`Agent 连续 ${restarts} 次快速退出，暂停 5 分钟后重试（最近退出 code=${code} signal=${signal}）`);
+      log(t("Agent 连续 {0} 次快速退出，暂停 5 分钟后重试（最近退出 code={1} signal={2}）", restarts, code, signal));
       setTimeout(() => { restarts = 0; startChild(); }, 5 * 60_000);
       return;
     }
     const delay = Math.min(30_000, 1000 * 2 ** restarts);
-    log(`Agent 退出 code=${code} signal=${signal}，${Math.round(delay / 1000)}s 后重启`);
+    log(t("Agent 退出 code={0} signal={1}，{2}s 后重启", code, signal, Math.round(delay / 1000)));
     setTimeout(startChild, delay);
   });
 }
@@ -73,7 +74,7 @@ function cleanupAndExit(code) {
 function shutdown(sig) {
   if (stopping) return;
   stopping = true;
-  log(`收到 ${sig}，停止 Agent`);
+  log(t("收到 {0}，停止 Agent", sig));
   // 先让 daemon 优雅退出，3 秒后强杀
   if (child) {
     try { child.kill("SIGTERM"); } catch { }
@@ -95,10 +96,10 @@ process.on("unhandledRejection", (e) => log("unhandledRejection: " + (e?.stack |
 // 定期检查子进程是否卡死（pid 存活就交给 WebSocket 心跳处理）
 setInterval(() => {
   if (!stopping && !child) {
-    log("检测到 Agent 不在运行，重启");
+    log(t("检测到 Agent 不在运行，重启"));
     startChild();
   }
 }, 60_000);
 
-log(`守护进程启动 pid=${process.pid}`);
+log(t("守护进程启动 pid={0}", process.pid));
 startChild();

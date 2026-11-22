@@ -8,6 +8,7 @@ import readline from "node:readline";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { detectPlatform, deviceName } from "./platform.js";
+import { t, lang, saveLang } from "./i18n.js";
 import {
   loadConfig, saveConfig, isConfigured, normalizeUrl, randomToken,
   readPid, pidAlive, clearPid, ensureDirs, CONFIG_PATH, LOG_DIR, STATE_DIR,
@@ -43,7 +44,7 @@ const cmd = args[0] || "menu";
 const flags = new Set(args.slice(1));
 
 main().catch((e) => {
-  console.error(`${C.red}错误：${e?.message || e}${C.r}`);
+  console.error(t("{0}错误：{1}{2}", C.red, e?.message || e, C.r));
   process.exit(1);
 });
 
@@ -65,10 +66,11 @@ async function main() {
     case "domain": return domainCmd();
     case "admin-pass": case "passwd": return adminPassCmd();
     case "enroll": return enrollCmd();
+    case "lang": return langCmd();
     case "help": case "-h": case "--help": return help();
     case "-v": case "--version": return version();
     default:
-      console.error(`未知命令：${cmd}`);
+      console.error(t("未知命令：{0}", cmd));
       help();
       process.exit(1);
   }
@@ -81,7 +83,7 @@ function readPiped() {
 }
 
 function ask(question, { def = "", mask = false } = {}) {
-  const suffix = def ? ` ${C.dim}[${mask ? "已设置" : def}]${C.r}` : "";
+  const suffix = def ? ` ${C.dim}[${mask ? t("已设置") : def}]${C.r}` : "";
   if (!IS_TTY) {
     const line = pipedNext();
     process.stdout.write(`${question}${suffix} ${mask && line ? "***" : line}\n`);
@@ -134,34 +136,8 @@ function warn(s) { console.log(`${C.y}!${C.r} ${s}`); }
 function bad(s) { console.log(`${C.red}✗${C.r} ${s}`); }
 
 function help() {
-  console.log(`${C.b}termux-mcp-remote${C.r} —— 用 Cloudflare Worker 远程使用 Termux 终端
-
-${C.b}用法${C.r}
-  tmcp                 交互式菜单
-  tmcp setup           配置向导（首次使用）
-  tmcp deploy          用 wrangler 部署 Worker 并自动写入密钥
-  tmcp start           后台启动 Agent（守护进程）
-  tmcp stop            停止 Agent
-  tmcp status          查看连接状态
-  tmcp logs [-f]       查看日志
-  tmcp token [rotate]  查看 / 轮换访问令牌
-  tmcp url <地址>      修改 Worker 地址
-  tmcp test            本地自检（MCP 握手 + 工具调用）
-  tmcp doctor          环境体检
-  tmcp panel           本地应急面板（只监听 127.0.0.1；日常用 Worker 的 /admin）
-  tmcp domain          给 Worker 绑定自有域名（解决 workers.dev 被污染）
-  tmcp admin-pass      设置 / 重置后台登录密码（与 API token 无关）
-  tmcp enroll [地址] [注册码]   用一次性注册码一键配置（地址+密钥）
-
-${C.b}典型流程${C.r}
-  tmcp deploy      ${C.dim}# 一次性，部署 Worker 并生成 token${C.r}
-  tmcp setup       ${C.dim}# 确认地址（直接回车用刚部署的）${C.r}
-  tmcp start       ${C.dim}# 让手机连上 Worker${C.r}
-
-${C.b}客户端配置${C.r}
-  URL:      https://<你的-worker>/mcp
-  请求头:   Authorization: Bearer <AUTH_TOKEN>
-`);
+  console.log(t("{0}termux-mcp-remote{1} —— 用 Cloudflare Worker 远程使用 Termux 终端\n\n{2}用法{3}\n  tmcp                 交互式菜单\n  tmcp setup           配置向导（首次使用）\n  tmcp deploy          用 wrangler 部署 Worker 并自动写入密钥\n  tmcp start           后台启动 Agent（守护进程）\n  tmcp stop            停止 Agent\n  tmcp status          查看连接状态\n  tmcp logs [-f]       查看日志\n  tmcp token [rotate]  查看 / 轮换访问令牌\n  tmcp url <地址>      修改 Worker 地址\n  tmcp test            本地自检（MCP 握手 + 工具调用）\n  tmcp doctor          环境体检\n  tmcp panel           本地应急面板（只监听 127.0.0.1；日常用 Worker 的 /admin）\n  tmcp domain          给 Worker 绑定自有域名（解决 workers.dev 被污染）\n  tmcp admin-pass      设置 / 重置后台登录密码（与 API token 无关）\n  tmcp enroll [地址] [注册码]   用一次性注册码一键配置（地址+密钥）\n\n{4}典型流程{5}\n  tmcp deploy      {6}# 一次性，部署 Worker 并生成 token{7}\n  tmcp setup       {8}# 确认地址（直接回车用刚部署的）{9}\n  tmcp start       {10}# 让手机连上 Worker{11}\n\n{12}客户端配置{13}\n  URL:      https://<你的-worker>/mcp\n  请求头:   Authorization: Bearer <AUTH_TOKEN>\n", C.b, C.r, C.b, C.r, C.b, C.r, C.dim, C.r, C.dim, C.r, C.dim, C.r, C.b, C.r));
+  console.log(t("  tmcp lang [en|zh]    切换界面语言"));
 }
 
 async function version() {
@@ -175,32 +151,32 @@ async function version() {
 async function menu() {
   ensureDirs();
   const cfg = loadConfig();
-  console.log(`\n${C.b}${C.m}termux-mcp-remote${C.r} ${C.dim}· 手机终端远程 MCP · Cloudflare Worker${C.r}`);
+  console.log(t("\n{0}{1}termux-mcp-remote{2} {3}· 手机终端远程 MCP · Cloudflare Worker{4}", C.b, C.m, C.r, C.dim, C.r));
   const pid = readPid();
   const running = pidAlive(pid);
-  console.log(`${running ? `${C.g}● Agent 运行中${C.r} ${C.dim}pid=${pid}${C.r}` : `${C.dim}○ Agent 未运行${C.r}`}`);
-  console.log(`${cfg.workerUrl ? `${C.dim}Worker:${C.r} ${cfg.workerUrl}` : `${C.y}尚未配置 Worker 地址${C.r}`}`);
-  if (cfg.workerUrl) console.log(`${C.dim}管理界面:${C.r} ${cfg.workerUrl}/admin\n`);
+  console.log(`${running ? t("{0}● Agent 运行中{1} {2}pid={3}{4}", C.g, C.r, C.dim, pid, C.r) : t("{0}○ Agent 未运行{1}", C.dim, C.r)}`);
+  console.log(`${cfg.workerUrl ? `${C.dim}Worker:${C.r} ${cfg.workerUrl}` : t("{0}尚未配置 Worker 地址{1}", C.y, C.r)}`);
+  if (cfg.workerUrl) console.log(t("{0}管理界面:{1} {2}/admin\n", C.dim, C.r, cfg.workerUrl));
 
   const items = [
-    ["1", "配置向导（setup）", setup],
-    ["2", "启动 Agent", start],
-    ["3", "停止 Agent", stop],
-    ["4", "查看状态", status],
-    ["5", "查看日志", logs],
-    ["6", "部署 / 更新 Worker", deploy],
-    ["7", "查看令牌", tokenCmd],
-    ["8", "本地自检", test],
-    ["9", "环境体检", doctor],
-    ["p", "管理面板", panel],
-    ["q", "退出", null],
+    ["1", t("配置向导（setup）"), setup],
+    ["2", t("启动 Agent"), start],
+    ["3", t("停止 Agent"), stop],
+    ["4", t("查看状态"), status],
+    ["5", t("查看日志"), logs],
+    ["6", t("部署 / 更新 Worker"), deploy],
+    ["7", t("查看令牌"), tokenCmd],
+    ["8", t("本地自检"), test],
+    ["9", t("环境体检"), doctor],
+    ["p", t("管理面板"), panel],
+    ["q", t("退出"), null],
   ];
   for (const [k, label] of items) console.log(`  ${C.c}${k}${C.r}  ${label}`);
-  const pick = await ask("\n选择", { def: "q" });
+  const pick = await ask(t("\n选择"), { def: "q" });
   closeRl();
   const item = items.find(([k]) => k === pick.toLowerCase());
   if (item && item[2]) await item[2]();
-  else if (pick.toLowerCase() !== "q") { warn("没有这个选项"); }
+  else if (pick.toLowerCase() !== "q") { warn(t("没有这个选项")); }
 }
 
 // ============================ setup ============================
@@ -208,16 +184,16 @@ async function setup({ force = false } = {}) {
   ensureDirs();
   const cfg = loadConfig();
   if (isConfigured(cfg) && !force) {
-    console.log(`\n当前配置已存在：${CONFIG_PATH}`);
-    const again = await ask("重新配置？(y/N)", { def: "N" });
+    console.log(t("\n当前配置已存在：{0}", CONFIG_PATH));
+    const again = await ask(t("重新配置？(y/N)"), { def: "N" });
     if (!/^y/i.test(again)) { closeRl(); return; }
   }
 
-  hr("配置向导");
-  console.log(`有注册码的话最省事：在 Worker 后台点「生成配置码」，然后把码粘进来，`);
-  console.log(`${C.dim}地址和两个 token 会自动填好，不用手抄。${C.r}`);
+  hr(t("配置向导"));
+  console.log(t("有注册码的话最省事：在 Worker 后台点「生成配置码」，然后把码粘进来，"));
+  console.log(t("{0}地址和两个 token 会自动填好，不用手抄。{1}", C.dim, C.r));
   console.log("");
-  const first = await ask("注册码（没有就按回车，手动填地址）", { def: "" });
+  const first = await ask(t("注册码（没有就按回车，手动填地址）"), { def: "" });
   if (first) {
     closeRl();
     await enrollCmd({ code: first, fromSetup: true });
@@ -225,51 +201,51 @@ async function setup({ force = false } = {}) {
   }
 
   console.log("");
-  console.log("手动配置。Worker 地址由「tmcp deploy」部署后给出，形如：");
-  tip("   https://termux-mcp.你的账号.workers.dev");
-  tip("   或你自己的域名：https://mcp.example.com");
+  console.log(t("手动配置。Worker 地址由「tmcp deploy」部署后给出，形如："));
+  tip(t("   https://termux-mcp.你的账号.workers.dev"));
+  tip(t("   或你自己的域名：https://mcp.example.com"));
   console.log("");
-  const urlIn = await ask("Worker 地址", { def: cfg.workerUrl || "" });
-  if (!urlIn) { bad("地址不能为空"); closeRl(); return; }
+  const urlIn = await ask(t("Worker 地址"), { def: cfg.workerUrl || "" });
+  if (!urlIn) { bad(t("地址不能为空")); closeRl(); return; }
   const workerUrl = normalizeUrl(urlIn);
-  if (!/^https?:\/\//.test(workerUrl)) { bad("地址格式不对，应以 http(s):// 开头"); closeRl(); return; }
+  if (!/^https?:\/\//.test(workerUrl)) { bad(t("地址格式不对，应以 http(s):// 开头")); closeRl(); return; }
 
   // 尝试从 Worker 读取公开健康信息，确认可达
-  process.stdout.write(`${C.dim}正在检查地址是否可达…${C.r}\n`);
+  process.stdout.write(t("{0}正在检查地址是否可达…{1}\n", C.dim, C.r));
   let reachable = false;
   try {
     const r = await fetch(`${workerUrl}/api/health`, { signal: AbortSignal.timeout(15000) });
     const j = await r.json().catch(() => ({}));
     reachable = r.ok && j.ok;
-    if (reachable) good(`服务器响应正常（v${j.version}）`);
-    else warn(`服务器返回 HTTP ${r.status}，可能地址不对或尚未部署`);
+    if (reachable) good(t("服务器响应正常（v{0}）", j.version));
+    else warn(t("服务器返回 HTTP {0}，可能地址不对或尚未部署", r.status));
   } catch (e) {
-    warn(`无法访问 ${workerUrl}/api/health：${e.message}`);
-    const go = await ask("仍然保存这个地址？(y/N)", { def: "N" });
+    warn(t("无法访问 {0}/api/health：{1}", workerUrl, e.message));
+    const go = await ask(t("仍然保存这个地址？(y/N)"), { def: "N" });
     if (!/^y/i.test(go)) { closeRl(); return; }
   }
 
-  const authIn = await ask("AUTH_TOKEN（AI 客户端用，留空则自动生成）", { def: cfg.authToken || "", mask: true });
+  const authIn = await ask(t("AUTH_TOKEN（AI 客户端用，留空则自动生成）"), { def: cfg.authToken || "", mask: true });
   const authToken = authIn && authIn.length >= 16 ? authIn : randomToken(32);
-  const agentIn = await ask("AGENT_TOKEN（手机连接用，留空则自动生成）", { def: cfg.agentToken || "", mask: true });
+  const agentIn = await ask(t("AGENT_TOKEN（手机连接用，留空则自动生成）"), { def: cfg.agentToken || "", mask: true });
   const agentToken = agentIn && agentIn.length >= 16 ? agentIn : randomToken(32);
 
-  const nameIn = await ask("设备名（显示用）", { def: cfg.name || defaultDeviceName() });
+  const nameIn = await ask(t("设备名（显示用）"), { def: cfg.name || defaultDeviceName() });
 
   const saved = saveConfig({ ...cfg, workerUrl, authToken, agentToken, name: nameIn });
-  good(`配置已保存：${CONFIG_PATH}（权限 600）`);
+  good(t("配置已保存：{0}（权限 600）", CONFIG_PATH));
 
-  console.log(`\n${C.b}接下来${C.r}`);
-  console.log(`  1) 把这两个值同步到 Worker（若用 tmcp deploy 部署会自动同步）：`);
+  console.log(t("\n{0}接下来{1}", C.b, C.r));
+  console.log(t("  1) 把这两个值同步到 Worker（若用 tmcp deploy 部署会自动同步）："));
   console.log(`     AUTH_TOKEN  = ${C.dim}${authToken.slice(0, 6)}…${authToken.slice(-4)}${C.r}`);
   console.log(`     AGENT_TOKEN = ${C.dim}${agentToken.slice(0, 6)}…${agentToken.slice(-4)}${C.r}`);
-  console.log(`     手工同步：cd ${WORKER_DIR} && npx wrangler secret put AUTH_TOKEN`);
-  console.log(`  2) 启动：${C.c}tmcp start${C.r}`);
-  console.log(`  3) 客户端填：${C.c}${saved.workerUrl}/mcp${C.r} + 请求头 ${C.dim}Authorization: Bearer <AUTH_TOKEN>${C.r}`);
-  console.log(`  4) 管理界面：${C.c}${saved.workerUrl}/admin${C.r} ${C.dim}（用 AUTH_TOKEN 登录）${C.r}`);
+  console.log(t("     手工同步：cd {0} && npx wrangler secret put AUTH_TOKEN", WORKER_DIR));
+  console.log(t("  2) 启动：{0}tmcp start{1}", C.c, C.r));
+  console.log(t("  3) 客户端填：{0}{1}/mcp{2} + 请求头 {3}Authorization: Bearer <AUTH_TOKEN>{4}", C.c, saved.workerUrl, C.r, C.dim, C.r));
+  console.log(t("  4) 管理界面：{0}{1}/admin{2} {3}（用 AUTH_TOKEN 登录）{4}", C.c, saved.workerUrl, C.r, C.dim, C.r));
   closeRl();
 
-  const go = await ask("\n现在启动 Agent？(Y/n)", { def: "Y" });
+  const go = await ask(t("\n现在启动 Agent？(Y/n)"), { def: "Y" });
   closeRl();
   if (!/^n/i.test(go)) await start();
 }
@@ -277,32 +253,32 @@ async function setup({ force = false } = {}) {
 // ============================ deploy ============================
 async function deploy() {
   ensureDirs();
-  hr("部署 Worker");
+  hr(t("部署 Worker"));
   if (!commandExists("npx")) {
-    bad("找不到 npx，请先：pkg install nodejs-lts");
+    bad(t("找不到 npx，请先：pkg install nodejs-lts"));
     return;
   }
   if (!fs.existsSync(path.join(WORKER_DIR, "node_modules"))) {
-    console.log(`${C.dim}首次部署，安装依赖…${C.r}`);
+    console.log(t("{0}首次部署，安装依赖…{1}", C.dim, C.r));
     const r = spawnSync("npm", ["install", "--no-audit", "--no-fund"], { cwd: WORKER_DIR, stdio: "inherit" });
-    if (r.status !== 0) { bad("依赖安装失败"); return; }
+    if (r.status !== 0) { bad(t("依赖安装失败")); return; }
   }
 
   const WR = wranglerCmd();
-  if (!WR) { bad("找不到 wrangler，请先：npm i -g wrangler"); return; }
-  console.log(`${C.dim}使用 ${WR.display}${C.r}`);
+  if (!WR) { bad(t("找不到 wrangler，请先：npm i -g wrangler")); return; }
+  console.log(t("{0}使用 {1}{2}", C.dim, WR.display, C.r));
 
-  console.log(`${C.dim}检查 Cloudflare 登录状态…${C.r}`);
+  console.log(t("{0}检查 Cloudflare 登录状态…{1}", C.dim, C.r));
   const who = spawnSync(WR.cmd, [...WR.pre, "whoami"], { cwd: WORKER_DIR, encoding: "utf8", timeout: 120000 });
   const whoOut = (who.stdout || "") + (who.stderr || "");
   if (!/You are logged in/i.test(whoOut)) {
-    bad("尚未登录 Cloudflare");
-    console.log(`请先执行：${C.c}cd ${WORKER_DIR} && npx wrangler login${C.r}`);
-    console.log(`${C.dim}登录后用浏览器授权即可，token 会存在本机。${C.r}`);
+    bad(t("尚未登录 Cloudflare"));
+    console.log(t("请先执行：{0}cd {1} && npx wrangler login{2}", C.c, WORKER_DIR, C.r));
+    console.log(t("{0}登录后用浏览器授权即可，token 会存在本机。{1}", C.dim, C.r));
     return;
   }
   const email = /associated with the email (\S+)/i.exec(whoOut)?.[1];
-  good(`已登录${email ? `：${email}` : ""}`);
+  good(t("已登录{0}", email ? `：${email}` : ""));
 
   // 复用已有配置里的 token，没有就生成
   const cfg = loadConfig();
@@ -310,46 +286,46 @@ async function deploy() {
   const agentToken = cfg.agentToken || randomToken(32);
   saveConfig({ ...cfg, authToken, agentToken });
 
-  console.log(`\n${C.dim}写入 Worker 密钥…${C.r}`);
+  console.log(t("\n{0}写入 Worker 密钥…{1}", C.dim, C.r));
   const secrets = JSON.stringify({ AUTH_TOKEN: authToken, AGENT_TOKEN: agentToken });
   const put = spawnSync(WR.cmd, [...WR.pre, "secret", "bulk"], {
     cwd: WORKER_DIR, input: secrets, encoding: "utf8", timeout: 180000,
   });
   if (put.status !== 0) {
-    bad("密钥写入失败");
+    bad(t("密钥写入失败"));
     console.log((put.stderr || "").slice(-1500));
     return;
   }
-  good("AUTH_TOKEN / AGENT_TOKEN 已写入");
+  good(t("AUTH_TOKEN / AGENT_TOKEN 已写入"));
 
-  console.log(`${C.dim}部署中…${C.r}`);
+  console.log(t("{0}部署中…{1}", C.dim, C.r));
   const dep = spawnSync(WR.cmd, [...WR.pre, "deploy"], { cwd: WORKER_DIR, encoding: "utf8", timeout: 300000 });
   const out = (dep.stdout || "") + (dep.stderr || "");
   if (dep.status !== 0) {
-    bad("部署失败");
+    bad(t("部署失败"));
     console.log(out.slice(-2500));
     return;
   }
   const m = /https:\/\/[a-z0-9-]+\.[a-z0-9.-]*workers\.dev/i.exec(out);
   const deployedUrl = m ? m[0] : "";
   console.log(out.split("\n").filter((l) => /Uploaded|Deployed|https:\/\//i.test(l)).join("\n"));
-  good("Worker 已部署");
+  good(t("Worker 已部署"));
 
   if (deployedUrl) {
     const keep = cfg.workerUrl && cfg.workerUrl !== deployedUrl;
-    const useIt = !keep ? "Y" : await ask(`当前配置的地址是 ${cfg.workerUrl}，改用 ${deployedUrl}？(y/N)`, { def: "N" });
+    const useIt = !keep ? "Y" : await ask(t("当前配置的地址是 {0}，改用 {1}？(y/N)", cfg.workerUrl, deployedUrl), { def: "N" });
     closeRl();
     if (/^y/i.test(useIt)) {
       saveConfig({ ...loadConfig(), workerUrl: deployedUrl, authToken, agentToken });
-      good(`已更新地址：${deployedUrl}`);
+      good(t("已更新地址：{0}", deployedUrl));
     } else if (!cfg.workerUrl) {
       saveConfig({ ...loadConfig(), workerUrl: deployedUrl, authToken, agentToken });
-      good(`已保存地址：${deployedUrl}`);
+      good(t("已保存地址：{0}", deployedUrl));
     }
   }
 
   const final = loadConfig();
-  console.log(`\n${C.b}客户端配置${C.r}`);
+  console.log(t("\n{0}客户端配置{1}", C.b, C.r));
   console.log(JSON.stringify({
     mcpServers: {
       termux: {
@@ -359,8 +335,8 @@ async function deploy() {
       },
     },
   }, null, 2));
-  console.log(`\n${C.b}下一步${C.r}  ${C.c}tmcp start${C.r}`);
-  console.log(`${C.b}管理界面${C.r}  ${C.c}${final.workerUrl}/admin${C.r} ${C.dim}（用 AUTH_TOKEN 登录，可看设备/日志、改默认设备、轮换 token）${C.r}`);
+  console.log(t("\n{0}下一步{1}  {2}tmcp start{3}", C.b, C.r, C.c, C.r));
+  console.log(t("{0}管理界面{1}  {2}{3}/admin{4} {5}（用 AUTH_TOKEN 登录，可看设备/日志、改默认设备、轮换 token）{6}", C.b, C.r, C.c, final.workerUrl, C.r, C.dim, C.r));
 }
 
 // ============================ start / stop ============================
@@ -368,7 +344,7 @@ async function start() {
   ensureDirs();
   const cfg = loadConfig();
   if (!isConfigured(cfg)) {
-    bad("尚未配置，请先运行：tmcp setup");
+    bad(t("尚未配置，请先运行：tmcp setup"));
     return;
   }
   const pid = readPid();
@@ -376,7 +352,7 @@ async function start() {
     // 可能是上一个实例正在退出（restart 场景）：等它退干净再继续
     for (let i = 0; i < 25 && pidAlive(pid); i++) await sleep(200);
     if (pidAlive(pid)) {
-      good(`Agent 已在运行（pid=${pid}）`);
+      good(t("Agent 已在运行（pid={0}）", pid));
       return;
     }
   }
@@ -407,11 +383,11 @@ async function start() {
     if (child.exitCode !== null) break;
   }
   if (!ok) {
-    bad("启动失败，最近日志：");
-    console.log(tailFile(ERR_LOG, 1200) || tailFile(OUT_LOG, 1200) || "(无输出)");
+    bad(t("启动失败，最近日志："));
+    console.log(tailFile(ERR_LOG, 1200) || tailFile(OUT_LOG, 1200) || t("(无输出)"));
     return;
   }
-  good(`Agent 已启动（pid=${readPid()}）`);
+  good(t("Agent 已启动（pid={0}）", readPid()));
 
   // 顺便确认链路上线
   for (let i = 0; i < 8; i++) {
@@ -419,20 +395,20 @@ async function start() {
     let s = null;
     try { s = await fetchStatus(cfg); } catch (e) {
       if (/401/.test(String(e.message))) {
-        bad("Worker 拒绝了 AUTH_TOKEN（401）：本地 token 与 Worker 上的密钥不一致");
-        console.log(`${C.dim}修复：cd ${WORKER_DIR} && npx wrangler secret put AUTH_TOKEN，粘贴：${cfg.authToken}${C.r}`);
-        console.log(`${C.dim}或在 WebUI（${cfg.workerUrl}/admin）登录后查看当前 token，再执行 tmcp token sync 同步。${C.r}`);
+        bad(t("Worker 拒绝了 AUTH_TOKEN（401）：本地 token 与 Worker 上的密钥不一致"));
+        console.log(t("{0}修复：cd {1} && npx wrangler secret put AUTH_TOKEN，粘贴：{2}{3}", C.dim, WORKER_DIR, cfg.authToken, C.r));
+        console.log(t("{0}或在 WebUI（{1}/admin）登录后查看当前 token，再执行 tmcp token sync 同步。{2}", C.dim, cfg.workerUrl, C.r));
         return;
       }
     }
     if (s?.agent?.online) {
-      good(`已连上 Worker，Agent 在线（${s.agent.name || cfg.name}）`);
-      console.log(`${C.dim}MCP 端点：${cfg.workerUrl}/mcp${C.r}`);
-      console.log(`${C.dim}管理界面：${cfg.workerUrl}/admin${C.r}`);
+      good(t("已连上 Worker，Agent 在线（{0}）", s.agent.name || cfg.name));
+      console.log(t("{0}MCP 端点：{1}/mcp{2}", C.dim, cfg.workerUrl, C.r));
+      console.log(t("{0}管理界面：{1}/admin{2}", C.dim, cfg.workerUrl, C.r));
       return;
     }
   }
-  warn("进程已启动，但暂未确认 Worker 侧在线。用 tmcp status 或 tmcp logs -f 查看");
+  warn(t("进程已启动，但暂未确认 Worker 侧在线。用 tmcp status 或 tmcp logs -f 查看"));
 }
 
 // 重启：必须先把「延时启动器」派生到独立进程组，再停服务。
@@ -445,12 +421,12 @@ async function restartCmd() {
     await sleep(400);
     const p = readPid();
     if (pidAlive(p)) {
-      good(`Agent 已重启（pid=${p}）`);
+      good(t("Agent 已重启（pid={0}）", p));
       await confirmOnline();
       return;
     }
   }
-  warn("重启命令已下发，但还没确认进程启动。稍后用 tmcp status 查看");
+  warn(t("重启命令已下发，但还没确认进程启动。稍后用 tmcp status 查看"));
 }
 
 // 重启后确认隧道真的连回来了（而不是只有进程活着）
@@ -463,12 +439,12 @@ async function confirmOnline() {
       const s = await fetchStatus(cfg);
       const n = (s.agent?.devices || []).length;
       if (n > 0) {
-        good(`已连上 Worker（${n} 台设备在线）`);
+        good(t("已连上 Worker（{0} 台设备在线）", n));
         return;
       }
     } catch { }
   }
-  warn("进程已启动，但暂未确认在线。用 tmcp status 复查");
+  warn(t("进程已启动，但暂未确认在线。用 tmcp status 复查"));
 }
 
 // 独立进程组里跑 `cli.js start`，不受 agent 停机时的 killAll 影响
@@ -484,7 +460,7 @@ function spawnDetachedStarter() {
     });
     child.unref();
   } catch (e) {
-    warn(`派生启动器失败：${e.message}`);
+    warn(t("派生启动器失败：{0}", e.message));
   }
 }
 
@@ -502,7 +478,7 @@ async function stop({ quiet = false } = {}) {
   const pid = readPid();
   if (!pidAlive(pid)) {
     clearPid();
-    if (!quiet) warn("Agent 未运行");
+    if (!quiet) warn(t("Agent 未运行"));
     return;
   }
   try { process.kill(pid, "SIGTERM"); } catch { }
@@ -512,9 +488,9 @@ async function stop({ quiet = false } = {}) {
   }
   if (pidAlive(pid)) {
     try { process.kill(pid, "SIGKILL"); } catch { }
-    warn("进程未响应 SIGTERM，已强制结束");
+    warn(t("进程未响应 SIGTERM，已强制结束"));
   } else if (!quiet) {
-    good(`Agent 已停止（pid=${pid}）`);
+    good(t("Agent 已停止（pid={0}）", pid));
   }
   clearPid();
   if (detectPlatform().isTermux) {
@@ -540,7 +516,7 @@ async function fetchStatus(cfg) {
         signal: AbortSignal.timeout(15000),
       });
       if (r2.ok) {
-        good("AUTH_TOKEN 已过期，已用设备凭证自动同步");
+        good(t("AUTH_TOKEN 已过期，已用设备凭证自动同步"));
         return r2.json();
       }
     }
@@ -573,39 +549,39 @@ async function status() {
   const cfg = loadConfig();
   const pid = readPid();
   const running = pidAlive(pid);
-  hr("状态");
+  hr(t("状态"));
   const supPid = readSupPid();
   const supRunning = pidAlive(supPid);
-  console.log(`本地 Agent   ${running ? `${C.g}运行中${C.r}（pid=${pid}）` : `${C.dim}未运行${C.r}`}`);
-  console.log(`守护进程     ${supRunning ? `${C.g}运行中${C.r}（pid=${supPid}，崩溃自动重启）` : `${C.dim}未运行${C.r}`}`);
-  console.log(`Worker 地址  ${cfg.workerUrl || `${C.y}未配置${C.r}`}`);
+  console.log(t("本地 Agent   {0}", running ? t("{0}运行中{1}（pid={2}）", C.g, C.r, pid) : t("{0}未运行{1}", C.dim, C.r)));
+  console.log(t("守护进程     {0}", supRunning ? t("{0}运行中{1}（pid={2}，崩溃自动重启）", C.g, C.r, supPid) : t("{0}未运行{1}", C.dim, C.r)));
+  console.log(t("Worker 地址  {0}", cfg.workerUrl || t("{0}未配置{1}", C.y, C.r)));
   if (!cfg.workerUrl || !cfg.authToken) return;
 
   try {
     const s = await fetchStatus(cfg);
     const a = s.agent || {};
     const devices = a.devices || [];
-    console.log(`Worker       ${C.g}在线${C.r}（v${s.worker?.version}）`);
+    console.log(t("Worker       {0}在线{1}（v{2}）", C.g, C.r, s.worker?.version));
     if (devices.length) {
-      console.log(`设备         ${C.g}${devices.length} 台在线${C.r}`);
+      console.log(t("设备         {0}{1} 台在线{2}", C.g, devices.length, C.r));
       for (const d of devices) {
         const online = d.state === "ready";
         const mark = online ? `${C.g}●${C.r}` : `${C.y}○${C.r}`;
         const label = `${d.id}`.padEnd(20);
         const kind = [d.os, d.distro, d.arch].filter(Boolean).join(" · ");
-        const def = a.defaultDevice === d.id ? ` ${C.dim}(默认)${C.r}` : "";
+        const def = a.defaultDevice === d.id ? t(" {0}(默认){1}", C.dim, C.r) : "";
         console.log(`  ${mark} ${label} ${d.name || "-"}${def}`);
-        console.log(`    ${C.dim}${kind || "-"}${d.version ? " · v" + d.version : ""} · 最后活跃 ${d.lastSeen ? new Date(d.lastSeen).toLocaleTimeString("zh-CN") : "-"}${C.r}`);
+        console.log(t("    {0}{1}{2} · 最后活跃 {3}{4}", C.dim, kind || "-", d.version ? " · v" + d.version : "", d.lastSeen ? new Date(d.lastSeen).toLocaleTimeString("zh-CN") : "-", C.r));
       }
-      console.log(`累计调用     ${a.calls ?? 0}（失败 ${a.errors ?? 0}，排队 ${a.pending ?? 0}）`);
+      console.log(t("累计调用     {0}（失败 {1}，排队 {2}）", a.calls ?? 0, a.errors ?? 0, a.pending ?? 0));
     } else {
-      console.log(`设备         ${C.y}无设备连接${C.r}`);
-      console.log(`${C.dim}本机未连上 Worker。检查 tmcp logs，或稍等自动重连。${C.r}`);
+      console.log(t("设备         {0}无设备连接{1}", C.y, C.r));
+      console.log(t("{0}本机未连上 Worker。检查 tmcp logs，或稍等自动重连。{1}", C.dim, C.r));
     }
-    console.log(`\nMCP 端点     ${cfg.workerUrl}/mcp`);
-    console.log(`管理界面     ${cfg.workerUrl}/admin`);
+    console.log(t("\nMCP 端点     {0}/mcp", cfg.workerUrl));
+    console.log(t("管理界面     {0}/admin", cfg.workerUrl));
   } catch (e) {
-    bad(`查询 Worker 失败：${e.message}`);
+    bad(t("查询 Worker 失败：{0}", e.message));
   }
 }
 
@@ -613,7 +589,7 @@ async function status() {
 async function logs() {
   ensureDirs();
   if (flags.has("-f") || flags.has("--follow")) {
-    console.log(`${C.dim}跟踪 ${OUT_LOG}（Ctrl-C 退出）${C.r}`);
+    console.log(t("{0}跟踪 {1}（Ctrl-C 退出）{2}", C.dim, OUT_LOG, C.r));
     const child = spawn("tail", ["-f", "-n", "80", OUT_LOG, ERR_LOG], { stdio: "inherit" });
     await new Promise((resolve) => {
       process.on("SIGINT", () => { child.kill(); resolve(); });
@@ -623,7 +599,7 @@ async function logs() {
   }
   const n = Number([...flags].find((f) => /^-\d+$/.test(f))?.slice(1) || 60);
   console.log(`${C.dim}—— ${OUT_LOG} ——${C.r}`);
-  console.log(tailFile(OUT_LOG, 20000, n) || "(空)");
+  console.log(tailFile(OUT_LOG, 20000, n) || t("(空)"));
   const errTail = tailFile(ERR_LOG, 8000, 20);
   if (errTail.trim()) {
     console.log(`\n${C.dim}—— ${ERR_LOG} ——${C.r}`);
@@ -658,7 +634,7 @@ async function tokenCmd() {
 
   // 从 Worker 拉取当前 token（在 WebUI 上轮换过之后用这个同步本机）
   if (args[1] === "sync") {
-    if (!cfg.workerUrl) { bad("尚未配置 Worker 地址"); return; }
+    if (!cfg.workerUrl) { bad(t("尚未配置 Worker 地址")); return; }
     const tryToken = args[2] || cfg.authToken;
     try {
       const r = await fetch(`${cfg.workerUrl}/api/admin/state`, {
@@ -666,19 +642,19 @@ async function tokenCmd() {
         signal: AbortSignal.timeout(15000),
       });
       if (!r.ok) {
-        bad(`拉取失败：HTTP ${r.status}。请用 tmcp token sync <当前有效的 AUTH_TOKEN>`);
+        bad(t("拉取失败：HTTP {0}。请用 tmcp token sync <当前有效的 AUTH_TOKEN>", r.status));
         return;
       }
       const j = await r.json();
       const next = { ...loadConfig(), authToken: j.authToken };
       saveConfig(next);
-      good("已从 Worker 同步 AUTH_TOKEN");
+      good(t("已从 Worker 同步 AUTH_TOKEN"));
       if (pidAlive(readPid())) {
         await stop({ quiet: true });
         await start();
       }
     } catch (e) {
-      bad(`拉取失败：${e.message}`);
+      bad(t("拉取失败：{0}", e.message));
     }
     return;
   }
@@ -686,30 +662,30 @@ async function tokenCmd() {
   const rotate = args[1] === "rotate";
   if (rotate) {
     const which = args[2] || "auth";
-    if (!["auth", "agent"].includes(which)) { bad("用法：tmcp token rotate [auth|agent]"); return; }
+    if (!["auth", "agent"].includes(which)) { bad(t("用法：tmcp token rotate [auth|agent]")); return; }
     const next = randomToken(32);
     if (which === "auth") cfg.authToken = next; else cfg.agentToken = next;
     saveConfig(cfg);
-    good(`已生成新的 ${which === "auth" ? "AUTH_TOKEN" : "AGENT_TOKEN"}`);
-    warn("记得同步到 Worker：cd worker && npx wrangler secret put " + (which === "auth" ? "AUTH_TOKEN" : "AGENT_TOKEN"));
-    if (which === "agent") warn("并重启 Agent：tmcp restart");
+    good(t("已生成新的 {0}", which === "auth" ? "AUTH_TOKEN" : "AGENT_TOKEN"));
+    warn(t("记得同步到 Worker：cd worker && npx wrangler secret put ") + (which === "auth" ? "AUTH_TOKEN" : "AGENT_TOKEN"));
+    if (which === "agent") warn(t("并重启 Agent：tmcp restart"));
     return;
   }
-  hr("令牌");
-  console.log(`AUTH_TOKEN   ${cfg.authToken || "(未设置)"}`);
-  console.log(`AGENT_TOKEN  ${cfg.agentToken || "(未设置)"}`);
-  console.log(`\n${C.dim}客户端请求头：Authorization: Bearer <AUTH_TOKEN>${C.r}`);
-  console.log(`${C.dim}在 Worker 的 /admin 上轮换过 token 后，用 tmcp token sync 把新值取回本机。${C.r}`);
-  console.log(`${C.dim}轮换：tmcp token rotate auth | tmcp token rotate agent${C.r}`);
+  hr(t("令牌"));
+  console.log(`AUTH_TOKEN   ${cfg.authToken || t("(未设置)")}`);
+  console.log(`AGENT_TOKEN  ${cfg.agentToken || t("(未设置)")}`);
+  console.log(t("\n{0}客户端请求头：Authorization: Bearer <AUTH_TOKEN>{1}", C.dim, C.r));
+  console.log(t("{0}在 Worker 的 /admin 上轮换过 token 后，用 tmcp token sync 把新值取回本机。{1}", C.dim, C.r));
+  console.log(t("{0}轮换：tmcp token rotate auth | tmcp token rotate agent{1}", C.dim, C.r));
 }
 
 async function urlCmd() {
   const u = args[1];
-  if (!u) { bad("用法：tmcp url https://xxx.workers.dev"); return; }
+  if (!u) { bad(t("用法：tmcp url https://xxx.workers.dev")); return; }
   const cfg = loadConfig();
   cfg.workerUrl = normalizeUrl(u);
   saveConfig(cfg);
-  good(`Worker 地址已更新：${cfg.workerUrl}`);
+  good(t("Worker 地址已更新：{0}", cfg.workerUrl));
   if (pidAlive(readPid())) {
     await stop({ quiet: true });
     await start();
@@ -720,25 +696,25 @@ async function urlCmd() {
 async function test() {
   ensureDirs();
   const cfg = loadConfig();
-  if (!isConfigured(cfg)) { bad("尚未配置，请先 tmcp setup"); return; }
-  hr("本地自检");
+  if (!isConfigured(cfg)) { bad(t("尚未配置，请先 tmcp setup")); return; }
+  hr(t("本地自检"));
 
-  console.log(`${C.dim}1/4 Worker 健康检查${C.r}`);
+  console.log(t("{0}1/4 Worker 健康检查{1}", C.dim, C.r));
   try {
     const r = await fetch(`${cfg.workerUrl}/api/health`, { signal: AbortSignal.timeout(15000) });
     const j = await r.json();
-    good(`Worker 在线 v${j.version}`);
-  } catch (e) { bad(`不可达：${e.message}`); return; }
+    good(t("Worker 在线 v{0}", j.version));
+  } catch (e) { bad(t("不可达：{0}", e.message)); return; }
 
-  console.log(`${C.dim}2/4 鉴权与隧道状态${C.r}`);
+  console.log(t("{0}2/4 鉴权与隧道状态{1}", C.dim, C.r));
   let st;
   try {
     st = await fetchStatus(cfg);
-    if (!st.agent?.online) { bad("Agent 未连接，先执行 tmcp start"); return; }
-    good(`Agent 在线：${st.agent.name} v${st.agent.version}`);
-  } catch (e) { bad(`失败：${e.message}`); return; }
+    if (!st.agent?.online) { bad(t("Agent 未连接，先执行 tmcp start")); return; }
+    good(t("Agent 在线：{0} v{1}", st.agent.name, st.agent.version));
+  } catch (e) { bad(t("失败：{0}", e.message)); return; }
 
-  console.log(`${C.dim}3/4 MCP 握手${C.r}`);
+  console.log(t("{0}3/4 MCP 握手{1}", C.dim, C.r));
   let sid = null;
   try {
     const init = await mcpCall(cfg, null, {
@@ -746,26 +722,26 @@ async function test() {
       params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "tmcp-test", version: "1.0" } },
     });
     sid = init.headers.get("mcp-session-id");
-    if (init.body?.result?.serverInfo) good(`握手成功：${init.body.result.serverInfo.name} v${init.body.result.serverInfo.version}`);
-    else { bad(`握手异常：${JSON.stringify(init.body).slice(0, 300)}`); return; }
+    if (init.body?.result?.serverInfo) good(t("握手成功：{0} v{1}", init.body.result.serverInfo.name, init.body.result.serverInfo.version));
+    else { bad(t("握手异常：{0}", JSON.stringify(init.body).slice(0, 300))); return; }
     await mcpCall(cfg, sid, { jsonrpc: "2.0", method: "notifications/initialized" }, { notify: true });
-  } catch (e) { bad(`失败：${e.message}`); return; }
+  } catch (e) { bad(t("失败：{0}", e.message)); return; }
 
-  console.log(`${C.dim}4/4 工具调用${C.r}`);
+  console.log(t("{0}4/4 工具调用{1}", C.dim, C.r));
   try {
     const r = await mcpCall(cfg, sid, {
       jsonrpc: "2.0", id: 2, method: "tools/call",
       params: { name: "run_command", arguments: { command: "echo tmcp-ok; uname -m; date +%s" } },
     });
     const text = r.body?.result?.content?.[0]?.text || "";
-    if (r.body?.result?.isError) { bad(`工具返回错误：${text.slice(0, 300)}`); return; }
-    if (text.includes("tmcp-ok")) good("工具调用成功（run_command 已在手机上执行）");
-    else warn(`调用完成但输出异常：${text.slice(0, 200)}`);
-  } catch (e) { bad(`失败：${e.message}`); return; }
+    if (r.body?.result?.isError) { bad(t("工具返回错误：{0}", text.slice(0, 300))); return; }
+    if (text.includes("tmcp-ok")) good(t("工具调用成功（run_command 已在手机上执行）"));
+    else warn(t("调用完成但输出异常：{0}", text.slice(0, 200)));
+  } catch (e) { bad(t("失败：{0}", e.message)); return; }
 
-  console.log(`\n${C.g}${C.b}全部通过${C.r} —— 可以把这个地址填进 AI 客户端：`);
+  console.log(t("\n{0}{1}全部通过{2} —— 可以把这个地址填进 AI 客户端：", C.g, C.b, C.r));
   console.log(`  ${cfg.workerUrl}/mcp`);
-  console.log(`  ${C.dim}请求头 Authorization: Bearer <AUTH_TOKEN>${C.r}`);
+  console.log(t("  {0}请求头 Authorization: Bearer <AUTH_TOKEN>{1}", C.dim, C.r));
 }
 
 async function mcpCall(cfg, sid, payload, { notify = false } = {}) {
@@ -805,13 +781,33 @@ async function panel() {
   const host = process.env.PANEL_HOST || "127.0.0.1";
   const server = startPanel({ port, host, log: (m) => good(m) });
   const url = `http://${host}:${port}/panel`;
-  console.log(`\n本地面板：${C.c}${url}${C.r}`);
-  console.log(`${C.dim}只监听 ${host}，不会暴露到公网。Ctrl-C 退出。${C.r}`);
-  console.log(`${C.dim}远程管理用 Worker 的 /admin：${loadConfig().workerUrl}/admin${C.r}`);
+  console.log(t("\n本地面板：{0}{1}{2}", C.c, url, C.r));
+  console.log(t("{0}只监听 {1}，不会暴露到公网。Ctrl-C 退出。{2}", C.dim, host, C.r));
+  console.log(t("{0}远程管理用 Worker 的 /admin：{1}/admin{2}", C.dim, loadConfig().workerUrl, C.r));
   await new Promise((resolve) => {
     process.on("SIGINT", () => { server.close(); resolve(); });
     process.on("SIGTERM", () => { server.close(); resolve(); });
   });
+}
+
+// ============================ lang ============================
+// 切换 tmcp 的界面语言。安装脚本也会写同一个文件（~/.config/termux-mcp-remote/lang）。
+async function langCmd() {
+  const cur = lang();
+  const arg = (args[1] || "").toLowerCase();
+
+  if (!arg) {
+    console.log(t("当前语言：{0}", cur === "zh" ? "中文 (zh)" : "English (en)"));
+    console.log(t("切换：tmcp lang en | tmcp lang zh"));
+    return;
+  }
+  if (!["en", "zh", "english", "chinese", "cn"].includes(arg)) {
+    bad(t("未知语言：{0}（可用 en / zh）", arg));
+    return;
+  }
+  const v = saveLang(arg);
+  good(t("界面语言已切换为 {0}", v === "zh" ? "中文 (zh)" : "English (en)"));
+  tip(t("配置码和 token 不受影响，无需重新部署"));
 }
 
 // ============================ enroll ============================
@@ -839,41 +835,41 @@ async function enrollCmd(opts = {}) {
     }
   }
 
-  if (!opts.fromSetup) hr("用注册码配置");
+  if (!opts.fromSetup) hr(t("用注册码配置"));
   if (!hint) {
-    console.log(`${C.dim}在 Worker 后台（${cfg.workerUrl || "你的 Worker"}/admin）点「生成配置码」，`);
-    console.log(`复制那串码，直接粘到这里。${C.r}`);
-    hint = await ask("注册码", { def: "" });
+    console.log(t("{0}在 Worker 后台（{1}/admin）点「生成配置码」，", C.dim, cfg.workerUrl || t("你的 Worker")));
+    console.log(t("复制那串码，直接粘到这里。{0}", C.r));
+    hint = await ask(t("注册码"), { def: "" });
     closeRl();
   }
   const code = extractCode(hint);
-  if (!code) { bad("这不是有效的注册码"); return; }
+  if (!code) { bad(t("这不是有效的注册码")); return; }
 
   // 地址优先级：命令行 > 注册码里带的 > 已有配置 > 追问
   let base = urlHint || cfg.workerUrl || "";
   if (!base) {
-    console.log(`${C.dim}还需要 Worker 地址（注册码只含随机数，不含地址时需手填一次）。${C.r}`);
-    base = await ask("Worker 地址", { def: "" });
+    console.log(t("{0}还需要 Worker 地址（注册码只含随机数，不含地址时需手填一次）。{1}", C.dim, C.r));
+    base = await ask(t("Worker 地址"), { def: "" });
     closeRl();
   }
-  if (!base) { bad("缺少 Worker 地址"); return; }
+  if (!base) { bad(t("缺少 Worker 地址")); return; }
 
-  process.stdout.write(`${C.dim}正在兑换…${C.r}\n`);
+  process.stdout.write(t("{0}正在兑换…{1}\n", C.dim, C.r));
   try {
     const saved = await enrollAndSave({ code, workerUrl: base });
-    good(`配置完成：${saved.workerUrl}`);
+    good(t("配置完成：{0}", saved.workerUrl));
     tip(`AUTH_TOKEN  ${saved.authToken.slice(0, 6)}…${saved.authToken.slice(-4)}`);
     tip(`AGENT_TOKEN ${saved.agentToken.slice(0, 6)}…${saved.agentToken.slice(-4)}`);
-    tip("这串注册码已经作废，不能再用第二次");
+    tip(t("这串注册码已经作废，不能再用第二次"));
   } catch (e) {
     bad(e.message || String(e));
-    if (e.reason === "used") tip("一个注册码只能用一次；请回后台重新生成。");
-    else if (e.reason === "expired") tip("注册码有时效，过期了就在后台重新生成一个。");
-    else if (e.reason === "notfound") tip("码无效、已被撤销或已过期。");
+    if (e.reason === "used") tip(t("一个注册码只能用一次；请回后台重新生成。"));
+    else if (e.reason === "expired") tip(t("注册码有时效，过期了就在后台重新生成一个。"));
+    else if (e.reason === "notfound") tip(t("码无效、已被撤销或已过期。"));
     return;
   }
 
-  const go = await ask("\n现在启动 Agent？(Y/n)", { def: "Y" });
+  const go = await ask(t("\n现在启动 Agent？(Y/n)"), { def: "Y" });
   closeRl();
   if (!/^n/i.test(go)) await start();
 }
@@ -881,15 +877,15 @@ async function enrollCmd(opts = {}) {
 // ============================ admin-pass ============================
 // 后台密码只用于登录 WebUI；这里直接写 Worker，不需要旧密码（要 AUTH_TOKEN 证明身份）。
 async function adminPassCmd() {
-  hr("后台登录密码");
+  hr(t("后台登录密码"));
   const cfg = loadConfig();
-  if (!cfg.workerUrl) { bad("尚未配置 Worker 地址，请先 tmcp setup"); return; }
-  console.log(`${C.dim}这个密码只用于登录 ${cfg.workerUrl}/admin，与 AI 客户端使用的 AUTH_TOKEN 无关。${C.r}`);
-  console.log(`${C.dim}服务端只保存 PBKDF2 哈希，忘记时用本命令重设。${C.r}\n`);
+  if (!cfg.workerUrl) { bad(t("尚未配置 Worker 地址，请先 tmcp setup")); return; }
+  console.log(t("{0}这个密码只用于登录 {1}/admin，与 AI 客户端使用的 AUTH_TOKEN 无关。{2}", C.dim, cfg.workerUrl, C.r));
+  console.log(t("{0}服务端只保存 PBKDF2 哈希，忘记时用本命令重设。{1}\n", C.dim, C.r));
 
-  const pw = await ask("新密码（至少 8 位，留空则清除密码）", { mask: true });
+  const pw = await ask(t("新密码（至少 8 位，留空则清除密码）"), { mask: true });
   closeRl();
-  if (pw && pw.length < 8) { bad("密码至少 8 位"); return; }
+  if (pw && pw.length < 8) { bad(t("密码至少 8 位")); return; }
 
   try {
     const r = await fetch(`${cfg.workerUrl}/api/auth/reset`, {
@@ -899,26 +895,26 @@ async function adminPassCmd() {
       signal: AbortSignal.timeout(30000),
     });
     const j = await r.json();
-    if (!r.ok || !j.ok) { bad(`失败：${j.error || "HTTP " + r.status}`); return; }
+    if (!r.ok || !j.ok) { bad(t("失败：{0}", j.error || "HTTP " + r.status)); return; }
     if (pw) {
-      good(`后台密码已设置（所有已登录会话已失效）`);
-      console.log(`${C.dim}打开 ${cfg.workerUrl}/admin 用新密码登录。${C.r}`);
+      good(t("后台密码已设置（所有已登录会话已失效）"));
+      console.log(t("{0}打开 {1}/admin 用新密码登录。{2}", C.dim, cfg.workerUrl, C.r));
     } else {
-      good("后台密码已清除，下次打开 /admin 会重新引导设置");
+      good(t("后台密码已清除，下次打开 /admin 会重新引导设置"));
     }
   } catch (e) {
-    bad(`请求失败：${e.message}`);
+    bad(t("请求失败：{0}", e.message));
   }
 }
 
 // ============================ domain ============================
 // *.workers.dev 在很多网络下会被 DNS 污染，绑自有域名是最省事的解法。
 async function domainCmd() {
-  hr("绑定自有域名");
+  hr(t("绑定自有域名"));
   const cf = await import("./cf-api.js");
   const auth = cf.readWranglerAuth();
   if (!auth) {
-    bad("找不到 wrangler 登录凭据，请先执行：wrangler login");
+    bad(t("找不到 wrangler 登录凭据，请先执行：wrangler login"));
     return;
   }
   const cfg = loadConfig();
@@ -928,49 +924,49 @@ async function domainCmd() {
     accounts = await cf.listAccounts(auth.token);
     zones = await cf.listZones(auth.token);
   } catch (e) {
-    bad(`读取 Cloudflare 账号失败：${e.message}`);
-    console.log(`${C.dim}权限不足时，请在 Cloudflare Dashboard 手动添加 Workers 自定义域（Worker → Settings → Domains & Routes）。${C.r}`);
+    bad(t("读取 Cloudflare 账号失败：{0}", e.message));
+    console.log(t("{0}权限不足时，请在 Cloudflare Dashboard 手动添加 Workers 自定义域（Worker → Settings → Domains & Routes）。{1}", C.dim, C.r));
     return;
   }
   if (!zones.length) {
-    bad("账号下没有可用的域名（Zone）");
+    bad(t("账号下没有可用的域名（Zone）"));
     return;
   }
 
   const hostDefault = cfg.workerUrl ? new URL(cfg.workerUrl).hostname : "";
-  console.log("可用域名：");
+  console.log(t("可用域名："));
   zones.forEach((z, i) => console.log(`  ${C.c}${i + 1}${C.r}  ${z.name} ${C.dim}(${z.status})${C.r}`));
-  const pick = await ask("\n选择域名编号", { def: "1" });
+  const pick = await ask(t("\n选择域名编号"), { def: "1" });
   const zone = zones[Number(pick) - 1];
-  if (!zone) { bad("编号无效"); closeRl(); return; }
+  if (!zone) { bad(t("编号无效")); closeRl(); return; }
 
   const guess = hostDefault && hostDefault.endsWith(zone.name) ? hostDefault : `mcp.${zone.name}`;
-  const hostname = (await ask("要绑定的主机名", { def: guess })).trim();
+  const hostname = (await ask(t("要绑定的主机名"), { def: guess })).trim();
   closeRl();
-  if (!hostname.includes(".")) { bad("主机名不合法"); return; }
+  if (!hostname.includes(".")) { bad(t("主机名不合法")); return; }
 
   const accountId = accounts[0]?.id;
-  if (!accountId) { bad("没有可用的 Cloudflare 账号"); return; }
+  if (!accountId) { bad(t("没有可用的 Cloudflare 账号")); return; }
 
   try {
     const existing = await cf.listWorkerDomains(auth.token, accountId);
     const hit = existing.find((d) => d.hostname === hostname);
     if (hit && hit.service !== "termux-mcp") {
-      bad(`${hostname} 已经被 Worker「${hit.service}」占用`);
+      bad(t("{0} 已经被 Worker「{1}」占用", hostname, hit.service));
       return;
     }
     const r = await cf.attachWorkerDomain(auth.token, {
       accountId, zoneId: zone.id, hostname, service: "termux-mcp",
     });
-    good(`已绑定 ${hostname} → termux-mcp（证书由 Cloudflare 自动签发）`);
-    tip("证书签发通常需要 10-60 秒");
+    good(t("已绑定 {0} → termux-mcp（证书由 Cloudflare 自动签发）", hostname));
+    tip(t("证书签发通常需要 10-60 秒"));
   } catch (e) {
-    bad(`绑定失败：${e.message}`);
-    console.log(`${C.dim}也可以在 Dashboard 里绑定：Worker → Settings → Domains & Routes → Add custom domain${C.r}`);
+    bad(t("绑定失败：{0}", e.message));
+    console.log(t("{0}也可以在 Dashboard 里绑定：Worker → Settings → Domains & Routes → Add custom domain{1}", C.dim, C.r));
     return;
   }
 
-  console.log(`\n${C.dim}等待 DNS 与证书就绪…${C.r}`);
+  console.log(t("\n{0}等待 DNS 与证书就绪…{1}", C.dim, C.r));
   let ready = false;
   for (let i = 0; i < 20; i++) {
     await sleep(3000);
@@ -982,54 +978,54 @@ async function domainCmd() {
     } catch { }
   }
   if (!ready) {
-    warn("还不能通过新域名访问，稍等一会儿用 tmcp status 复查");
+    warn(t("还不能通过新域名访问，稍等一会儿用 tmcp status 复查"));
   } else {
-    good(`https://${hostname} 已可用`);
+    good(t("https://{0} 已可用", hostname));
   }
 
-  const use = await ask(`把当前 Worker 地址改成 https://${hostname}？(Y/n)`, { def: "Y" });
+  const use = await ask(t("把当前 Worker 地址改成 https://{0}？(Y/n)", hostname), { def: "Y" });
   closeRl();
   if (!/^n/i.test(use)) {
     const next = { ...loadConfig(), workerUrl: `https://${hostname}` };
     saveConfig(next);
-    good(`已更新：${next.workerUrl}`);
+    good(t("已更新：{0}", next.workerUrl));
     if (pidAlive(readPid())) {
       await stop({ quiet: true });
       await start();
     } else {
-      tip("下一步：tmcp start");
+      tip(t("下一步：tmcp start"));
     }
-    console.log(`\n${C.b}客户端地址${C.r}  ${next.workerUrl}/mcp`);
+    console.log(t("\n{0}客户端地址{1}  {2}/mcp", C.b, C.r, next.workerUrl));
   }
 }
 
 // ============================ doctor ============================
 async function doctor() {
-  hr("环境体检");
+  hr(t("环境体检"));
   const rows = [];
   const add = (name, ok, detail) => rows.push([name, ok, detail]);
 
   const major = Number(process.versions.node.split(".")[0]);
-  add("Node.js", major >= 20, `${process.version}${major >= 20 ? "" : "（需要 >=20）"}`);
-  add("WebSocket", typeof WebSocket === "function", typeof WebSocket === "function" ? "内置可用" : "缺少全局 WebSocket");
-  add("fetch", typeof fetch === "function", "内置");
-  add("script(PTY)", commandExists("script"), commandExists("script") ? "交互式 shell 可用" : "pkg install util-linux");
-  add("wrangler", commandExists("npx"), commandExists("npx") ? "可用于部署 Worker" : "pkg install nodejs-lts");
+  add("Node.js", major >= 20, `${process.version}${major >= 20 ? "" : t("（需要 >=20）")}`);
+  add("WebSocket", typeof WebSocket === "function", typeof WebSocket === "function" ? t("内置可用") : t("缺少全局 WebSocket"));
+  add("fetch", typeof fetch === "function", t("内置"));
+  add("script(PTY)", commandExists("script"), commandExists("script") ? t("交互式 shell 可用") : "pkg install util-linux");
+  add("wrangler", commandExists("npx"), commandExists("npx") ? t("可用于部署 Worker") : "pkg install nodejs-lts");
   const plat = detectPlatform();
-  add("运行平台", true, `${plat.isAndroid ? "Android" : plat.os} · ${plat.distro || "-"} · ${plat.arch}`);
+  add(t("运行平台"), true, `${plat.isAndroid ? "Android" : plat.os} · ${plat.distro || "-"} · ${plat.arch}`);
 
   const cfg = loadConfig();
-  add("配置文件", fs.existsSync(CONFIG_PATH), CONFIG_PATH);
+  add(t("配置文件"), fs.existsSync(CONFIG_PATH), CONFIG_PATH);
   try {
     const st = fs.statSync(CONFIG_PATH);
-    add("配置权限", (st.mode & 0o077) === 0, `0${(st.mode & 0o777).toString(8)}${(st.mode & 0o077) === 0 ? "" : "（建议 chmod 600）"}`);
+    add(t("配置权限"), (st.mode & 0o077) === 0, `0${(st.mode & 0o777).toString(8)}${(st.mode & 0o077) === 0 ? "" : t("（建议 chmod 600）")}`);
   } catch { }
 
-  add("Worker 地址", !!cfg.workerUrl, cfg.workerUrl || "未配置");
+  add(t("Worker 地址"), !!cfg.workerUrl, cfg.workerUrl || t("未配置"));
   const pid = readPid();
-  add("Agent 进程", pidAlive(pid), pidAlive(pid) ? `pid=${pid}` : "未运行");
+  add(t("Agent 进程"), pidAlive(pid), pidAlive(pid) ? `pid=${pid}` : t("未运行"));
   const supPid = readSupPid();
-  add("守护进程", pidAlive(supPid), pidAlive(supPid) ? `pid=${supPid}` : "未运行（tmcp start 会拉起）");
+  add(t("守护进程"), pidAlive(supPid), pidAlive(supPid) ? `pid=${supPid}` : t("未运行（tmcp start 会拉起）"));
 
   for (const [name, ok, detail] of rows) {
     const w = [...name].reduce((n, ch) => n + (ch.charCodeAt(0) > 0x2e80 ? 2 : 1), 0);
@@ -1041,16 +1037,16 @@ async function doctor() {
       const st = await fetchStatus(cfg);
       const devices = st.agent?.devices || [];
       if (devices.length) {
-        console.log(`\n隧道：${C.g}${devices.length} 台设备在线${C.r}`);
+        console.log(t("\n隧道：{0}{1} 台设备在线{2}", C.g, devices.length, C.r));
         for (const d of devices) {
-          console.log(`  ${C.dim}${d.id} · ${d.name} · ${[d.os, d.arch].filter(Boolean).join("/")} 最后活跃 ${d.lastSeen ? new Date(d.lastSeen).toLocaleTimeString("zh-CN") : "-"}${C.r}`);
+          console.log(t("  {0}{1} · {2} · {3} 最后活跃 {4}{5}", C.dim, d.id, d.name, [d.os, d.arch].filter(Boolean).join("/"), d.lastSeen ? new Date(d.lastSeen).toLocaleTimeString("zh-CN") : "-", C.r));
         }
       } else {
-        console.log(`\n隧道：${C.y}无设备在线${C.r}`);
+        console.log(t("\n隧道：{0}无设备在线{1}", C.y, C.r));
       }
-      console.log(`管理界面：${cfg.workerUrl}/admin`);
+      console.log(t("管理界面：{0}/admin", cfg.workerUrl));
     } catch (e) {
-      console.log(`\n隧道：${C.red}查询失败${C.r} ${C.dim}${e.message}${C.r}`);
+      console.log(t("\n隧道：{0}查询失败{1} {2}{3}{4}", C.red, C.r, C.dim, e.message, C.r));
     }
   }
 }
@@ -1058,8 +1054,8 @@ async function doctor() {
 // 优先本地 wrangler，其次全局，最后 npx
 function wranglerCmd() {
   const local = path.join(WORKER_DIR, "node_modules", ".bin", "wrangler");
-  if (fs.existsSync(local)) return { cmd: local, pre: [], display: "本地 wrangler" };
-  if (commandExists("wrangler")) return { cmd: "wrangler", pre: [], display: "全局 wrangler" };
+  if (fs.existsSync(local)) return { cmd: local, pre: [], display: t("本地 wrangler") };
+  if (commandExists("wrangler")) return { cmd: "wrangler", pre: [], display: t("全局 wrangler") };
   if (commandExists("npx")) return { cmd: "npx", pre: ["wrangler"], display: "npx wrangler" };
   return null;
 }

@@ -6,6 +6,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
+import { t } from "./i18n.js";
 import { createAssembler, sendJSON } from "../shared/wsjson.js";
 import { TOOL_SPECS } from "../shared/tools.mjs";
 import z from "zod";
@@ -48,7 +49,7 @@ function clampText(text, limit = REMOTE_TEXT_LIMIT) {
   // 避免截断在多字节字符中间
   let out = buf.toString("utf8");
   if (out.endsWith("\uFFFD")) out = out.slice(0, -1);
-  return out + `\n\n[已截断：原始 ${bytes} 字节，这里只返回前约 ${limit} 字节。需要更多请用 run_command 分段读取，或写到文件后用 read_file 指定 max_bytes]`;
+  return out + t("\n\n[已截断：原始 {0} 字节，这里只返回前约 {1} 字节。需要更多请用 run_command 分段读取，或写到文件后用 read_file 指定 max_bytes]", bytes, limit);
 }
 
 export class Agent {
@@ -111,19 +112,19 @@ export class Agent {
       this.ws = null;
     }
     const url = this.wsUrl();
-    this.log(`连接 ${url}`);
+    this.log(t("连接 {0}", url));
     let ws;
     try {
       ws = new WebSocket(url, { headers: { authorization: `Bearer ${this.cfg.agentToken}` } });
     } catch (e) {
-      this.log(`创建 WebSocket 失败：${e.message}`);
+      this.log(t("创建 WebSocket 失败：{0}", e.message));
       return this.scheduleReconnect();
     }
     this.ws = ws;
 
     const assemble = createAssembler(
-      (msg) => this.onMessage(msg).catch((e) => this.log(`处理消息出错：${e.stack || e}`)),
-      (err) => this.log(`分块错误：${err.message}`)
+      (msg) => this.onMessage(msg).catch((e) => this.log(t("处理消息出错：{0}", e.stack || e))),
+      (err) => this.log(t("分块错误：{0}", err.message))
     );
 
     ws.addEventListener("open", () => {
@@ -131,7 +132,7 @@ export class Agent {
       this.connectedAt = Date.now();
       this.attempt = 0;
       this.lastPong = Date.now();
-      this.log("已连上 Worker");
+      this.log(t("已连上 Worker"));
       const p = detectPlatform();
       sendJSON(ws, {
         t: "hello",
@@ -153,13 +154,13 @@ export class Agent {
     ws.addEventListener("close", (ev) => {
       this.connected = false;
       clearInterval(this.hbTimer);
-      this.log(`连接断开 code=${ev.code} ${ev.reason || ""}`.trim());
+      this.log(t("连接断开 code={0} {1}", ev.code, ev.reason || "").trim());
       this.scheduleReconnect();
     });
 
     ws.addEventListener("error", (ev) => {
       // Node 的 WebSocket 错误事件信息很少，close 事件随后会到
-      this.log(`连接错误${ev?.message ? "：" + ev.message : ""}`);
+      this.log(t("连接错误{0}", ev?.message ? "：" + ev.message : ""));
     });
   }
 
@@ -169,7 +170,7 @@ export class Agent {
     if (!build) return;
     if (!this.build) { this.build = build; return; }
     if (this.build === build) return;
-    this.log(`Worker 代码已更新（build ${this.build} → ${build}），重连以加载新版本`);
+    this.log(t("Worker 代码已更新（build {0} → {1}），重连以加载新版本", this.build, build));
     this.build = build;
     const old = this.ws;
     this.ws = null;
@@ -185,7 +186,7 @@ export class Agent {
       if (!this.connected) return;
       // 60 秒没有任何 pong，判定链路已死并重连
       if (Date.now() - this.lastPong > 120_000) {
-        this.log("心跳超时，主动重连");
+        this.log(t("心跳超时，主动重连"));
         const dead = this.ws;
         this.ws = null;
         this.connected = false;
@@ -216,7 +217,7 @@ export class Agent {
     this.attempt++;
     const base = Math.min(30_000, 1000 * 2 ** Math.min(this.attempt, 5));
     const delay = Math.round(base * (0.75 + Math.random() * 0.5));
-    this.log(`${(delay / 1000).toFixed(1)}s 后重连（第 ${this.attempt} 次）`);
+    this.log(t("{0}s 后重连（第 {1} 次）", (delay / 1000).toFixed(1), this.attempt));
     this.timer = setTimeout(() => this.connect(), delay);
   }
 
@@ -253,22 +254,22 @@ export class Agent {
     try {
       if (tool.startsWith("__")) {
         // 内部工具（WebUI 用），不走对外工具表的参数校验
-        if (!INTERNAL_TOOLS.has(tool)) throw new Error(`未知内部工具：${tool}`);
+        if (!INTERNAL_TOOLS.has(tool)) throw new Error(t("未知内部工具：{0}", tool));
         args = args && typeof args === "object" ? args : {};
       } else {
         const spec = TOOL_SPECS.find((t) => t.name === tool);
-        if (!spec) throw new Error(`未知工具：${tool}`);
+        if (!spec) throw new Error(t("未知工具：{0}", tool));
         const parser = z.object(spec.schema);
         const parsed = parser.safeParse(args ?? {});
         if (!parsed.success) {
           const detail = parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ");
-          throw new Error(`参数不合法：${detail}`);
+          throw new Error(t("参数不合法：{0}", detail));
         }
         args = parsed.data;
       }
       // 给单次执行加本地超时兜底，避免 Worker 已超时但这里一直跑
       const budget = Math.min(Number(msg.timeout_ms) || 45_000, 90_000) + 10_000;
-      const text = await withTimeout(this.dispatch(tool, args), budget, `本地执行超时（>${Math.round(budget / 1000)}s）`);
+      const text = await withTimeout(this.dispatch(tool, args), budget, t("本地执行超时（>{0}s）", Math.round(budget / 1000)));
       sendJSON(this.ws, { t: "result", id, ok: true, text: clampText(text) });
     } catch (e) {
       const err = e instanceof Error ? e.message : String(e);
@@ -301,12 +302,12 @@ export class Agent {
       // 内部命令（不在工具清单里暴露，供 Worker 的 WebUI 使用）
       case "__sysinfo": return this.internalSysinfo();
       case "__logs": return this.internalLogs(args);
-      default: throw new Error(`未知工具：${tool}`);
+      default: throw new Error(t("未知工具：{0}", tool));
     }
   }
 
   resolvePath(p) {
-    if (typeof p !== "string" || p.length === 0) throw new Error("path 不能为空");
+    if (typeof p !== "string" || p.length === 0) throw new Error(t("path 不能为空"));
     let q = p;
     if (q === "~") q = os.homedir();
     else if (q.startsWith("~/")) q = path.join(os.homedir(), q.slice(2));
@@ -316,7 +317,7 @@ export class Agent {
 
   assertNotProtected(abs, op) {
     for (const p of PROTECTED_PATHS) {
-      if (abs === p) throw new Error(`拒绝${op}：${p} 是受保护的根路径；需要操作内部文件请给出具体路径`);
+      if (abs === p) throw new Error(t("拒绝{0}：{1} 是受保护的根路径；需要操作内部文件请给出具体路径", op, p));
     }
   }
 
@@ -337,7 +338,7 @@ export class Agent {
         killed,
         signal: err.signal || null,
         error: killed
-          ? `命令超时（>${timeout_ms}ms）被终止。长任务请改用 job_start 后台运行`
+          ? t("命令超时（>{0}ms）被终止。长任务请改用 job_start 后台运行", timeout_ms)
           : err.message,
       };
       const e = new Error(JSON.stringify(payload, null, 2));
@@ -350,19 +351,19 @@ export class Agent {
     const abs = this.resolvePath(p);
     const limit = max_bytes || MAX_READ_BYTES;
     const st = await fs.stat(abs);
-    if (!st.isFile()) throw new Error(`${abs} 不是普通文件（可能是目录/设备/链接）`);
-    if (st.size === 0) return "[空文件]";
+    if (!st.isFile()) throw new Error(t("{0} 不是普通文件（可能是目录/设备/链接）", abs));
+    if (st.size === 0) return t("[空文件]");
     const truncated = st.size > limit;
     const fh = await fs.open(abs, "r");
     try {
       const buf = Buffer.allocUnsafe(Math.min(limit, st.size));
       const { bytesRead } = await fh.read({ buffer: buf, length: buf.length, position: 0 });
       if (buf.subarray(0, Math.min(bytesRead, 4096)).includes(0)) {
-        throw new Error(`${abs} 疑似二进制文件（共 ${st.size} 字节）。请用 run_command：base64 / xxd / strings / file`);
+        throw new Error(t("{0} 疑似二进制文件（共 {1} 字节）。请用 run_command：base64 / xxd / strings / file", abs, st.size));
       }
       const text = buf.toString("utf8");
       const notice = truncated
-        ? `\n\n[已截断：文件共 ${st.size} 字节，只返回前 ${bytesRead} 字节。可用 run_command 分段读取]`
+        ? t("\n\n[已截断：文件共 {0} 字节，只返回前 {1} 字节。可用 run_command 分段读取]", st.size, bytesRead)
         : "";
       return text + notice;
     } finally {
@@ -374,21 +375,21 @@ export class Agent {
     const abs = this.resolvePath(p);
     if (create_dirs) await fs.mkdir(path.dirname(abs), { recursive: true });
     await fs.writeFile(abs, content, "utf-8");
-    return `已写入 ${abs}（${Buffer.byteLength(content, "utf-8")} 字节）`;
+    return t("已写入 {0}（{1} 字节）", abs, Buffer.byteLength(content, "utf-8"));
   }
 
   async editFile({ path: p, old_text, new_text, replace_all }) {
-    if (old_text.length === 0) throw new Error("old_text 不能为空");
-    if (old_text === new_text) throw new Error("old_text 和 new_text 相同，无需编辑");
+    if (old_text.length === 0) throw new Error(t("old_text 不能为空"));
+    if (old_text === new_text) throw new Error(t("old_text 和 new_text 相同，无需编辑"));
     const abs = this.resolvePath(p);
     const st = await fs.stat(abs);
-    if (!st.isFile()) throw new Error(`${abs} 不是普通文件`);
-    if (st.size > MAX_EDIT_BYTES) throw new Error(`文件 ${st.size} 字节超过编辑上限，请改用 write_file`);
+    if (!st.isFile()) throw new Error(t("{0} 不是普通文件", abs));
+    if (st.size > MAX_EDIT_BYTES) throw new Error(t("文件 {0} 字节超过编辑上限，请改用 write_file", st.size));
     const content = await fs.readFile(abs, "utf8");
-    if (content.includes("\x00")) throw new Error(`${abs} 疑似二进制文件，不能用 edit_file`);
+    if (content.includes("\x00")) throw new Error(t("{0} 疑似二进制文件，不能用 edit_file", abs));
     const count = content.split(old_text).length - 1;
-    if (count === 0) throw new Error("没找到 old_text。必须与文件内容逐字一致（含缩进、换行）；可先 read_file 核对");
-    if (count > 1 && !replace_all) throw new Error(`old_text 出现了 ${count} 次。请扩大选区使其唯一，或 replace_all=true`);
+    if (count === 0) throw new Error(t("没找到 old_text。必须与文件内容逐字一致（含缩进、换行）；可先 read_file 核对"));
+    if (count > 1 && !replace_all) throw new Error(t("old_text 出现了 {0} 次。请扩大选区使其唯一，或 replace_all=true", count));
     let updated;
     if (replace_all) updated = content.split(old_text).join(new_text);
     else {
@@ -396,7 +397,7 @@ export class Agent {
       updated = content.slice(0, i) + new_text + content.slice(i + old_text.length);
     }
     await fs.writeFile(abs, updated, "utf8");
-    return `已替换 ${replace_all ? count : 1} 处：${abs}（${st.size} -> ${Buffer.byteLength(updated, "utf8")} 字节）`;
+    return t("已替换 {0} 处：{1}（{2} -> {3} 字节）", replace_all ? count : 1, abs, st.size, Buffer.byteLength(updated, "utf8"));
   }
 
   async listDir({ path: p }) {
@@ -423,17 +424,17 @@ export class Agent {
 
   async deletePath({ path: p, recursive }) {
     const abs = this.resolvePath(p);
-    this.assertNotProtected(abs, "删除");
+    this.assertNotProtected(abs, t("删除"));
     const st = await fs.lstat(abs);
     if (st.isDirectory()) await fs.rm(abs, { recursive, force: false });
     else await fs.unlink(abs);
-    return `已删除 ${abs}`;
+    return t("已删除 {0}", abs);
   }
 
   async movePath({ from, to }) {
     const a = this.resolvePath(from), b = this.resolvePath(to);
-    this.assertNotProtected(a, "移动");
-    this.assertNotProtected(b, "移动");
+    this.assertNotProtected(a, t("移动"));
+    this.assertNotProtected(b, t("移动"));
     await fs.mkdir(path.dirname(b), { recursive: true });
     try {
       await fs.rename(a, b);
@@ -442,7 +443,7 @@ export class Agent {
       await fs.cp(a, b, { recursive: true, dereference: false });
       await fs.rm(a, { recursive: true, force: true });
     }
-    return `已移动 ${a} -> ${b}`;
+    return t("已移动 {0} -> {1}", a, b);
   }
 
   async searchFiles({ pattern, dir, type, max_depth, max_results, exclude_dirs }) {
@@ -457,13 +458,13 @@ export class Agent {
     try {
       ({ stdout } = await execAsync(cmdStr, { timeout: 60000, maxBuffer: MAX_OUTPUT }));
     } catch (e) {
-      if (e.killed) throw new Error("搜索超时。请缩小 dir、减小 max_depth，或用 exclude_dirs 排除大目录");
+      if (e.killed) throw new Error(t("搜索超时。请缩小 dir、减小 max_depth，或用 exclude_dirs 排除大目录"));
       throw e;
     }
     let lines = stdout.split("\n").filter(Boolean);
     const truncated = lines.length > max_results;
     if (truncated) lines = lines.slice(0, max_results);
-    if (lines.length === 0) return `在 ${abs} 下没有找到匹配 "${pattern}" 的${type === "any" ? "文件或目录" : type === "file" ? "文件" : "目录"}`;
+    if (lines.length === 0) return t("在 {0} 下没有找到匹配 \"{1}\" 的{2}", abs, pattern, type === "any" ? t("文件或目录") : type === "file" ? t("文件") : t("目录"));
     return JSON.stringify({ dir: abs, pattern, count: lines.length, truncated, matches: lines }, null, 2);
   }
 
@@ -482,15 +483,15 @@ export class Agent {
     try {
       ({ stdout, stderr } = await execAsync(cmdStr, { timeout: 60000, maxBuffer: MAX_OUTPUT }));
     } catch (e) {
-      if (e.killed) throw new Error("搜索超时。请缩小 dir、用 include 限定类型，或用 exclude_dirs 排除大目录");
+      if (e.killed) throw new Error(t("搜索超时。请缩小 dir、用 include 限定类型，或用 exclude_dirs 排除大目录"));
       throw e;
     }
     if (!stdout) {
-      return `在 ${abs} 下没有找到内容匹配的行${stderr ? `\n(grep 提示: ${stderr.trim().slice(0, 300)})` : ""}`;
+      return t("在 {0} 下没有找到内容匹配的行{1}", abs, stderr ? `\n(grep 提示: ${stderr.trim().slice(0, 300)})` : "");
     }
     const lines = stdout.split("\n").filter(Boolean);
     const truncated = lines.length >= headN;
-    return clampText(lines.join("\n") + (truncated ? `\n\n[结果已截断，仅显示前 ${max_results} 条匹配]` : ""));
+    return clampText(lines.join("\n") + (truncated ? t("\n\n[结果已截断，仅显示前 {0} 条匹配]", max_results) : ""));
   }
 
   async systemInfo() {
@@ -553,7 +554,7 @@ export class Agent {
         await fh.close();
       }
     } catch (e) {
-      return `[读取日志失败：${e.message}]`;
+      return t("[读取日志失败：{0}]", e.message);
     }
   }
 }

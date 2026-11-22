@@ -85,6 +85,26 @@ bash get.sh --dir /opt/new --force
 > **安全保护**：如果检测到已有另一个位置的安装，脚本会**中止并且不改动任何文件**，
 > 而不是悄悄覆盖你的 `tmcp` 命令。必须显式加 `--force` 才会切换。
 
+### 界面语言
+
+安装脚本会记住你用的是哪个版本：
+
+| 用哪个脚本装的 | tmcp 的输出语言 |
+| --- | --- |
+| `get.sh` / `install.sh`（$LANG 非中文） | English |
+| `get-zh.sh` / `install.sh`（$LANG=zh*） | 中文 |
+
+随时可以切换：
+
+```bash
+tmcp lang          # 查看当前语言
+tmcp lang en       # 切到英文
+tmcp lang zh       # 切到中文
+```
+
+优先级：`TMCP_LANG` 环境变量 > `config.json` 的 `lang` > `~/.config/termux-mcp-remote/lang`（安装脚本写的）> 系统 locale > 英文。
+`tmcp logs` 里的日志同样跟随这个设置。
+
 ### 手动安装
 
 ```bash
@@ -301,6 +321,7 @@ tmcp logs -f         跟日志
 tmcp test            自检
 tmcp doctor          环境体检
 tmcp enroll [地址] [注册码]   用一次性配置码一键配置
+tmcp lang [en|zh]    切换界面语言
 tmcp admin-pass      设置 / 重置后台登录密码
 tmcp token           查看 token
 tmcp token sync      从 Worker 拉回当前 token（WebUI 轮换后用）
