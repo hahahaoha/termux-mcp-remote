@@ -9,11 +9,14 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { detectPlatform, deviceName } from "./platform.js";
 import { t, lang, saveLang } from "./i18n.js";
+import { fetchRetry, preferIPv4, explainError } from "./net.js";
 import {
   loadConfig, saveConfig, isConfigured, normalizeUrl, randomToken,
   readPid, pidAlive, clearPid, ensureDirs, CONFIG_PATH, LOG_DIR, STATE_DIR,
   SUP_PID_PATH,
 } from "../agent/config.js";
+
+preferIPv4();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -214,7 +217,7 @@ async function setup({ force = false } = {}) {
   process.stdout.write(t("{0}正在检查地址是否可达…{1}\n", C.dim, C.r));
   let reachable = false;
   try {
-    const r = await fetch(`${workerUrl}/api/health`, { signal: AbortSignal.timeout(15000) });
+    const r = await fetchRetry(`${workerUrl}/api/health`, { signal: AbortSignal.timeout(15000) });
     const j = await r.json().catch(() => ({}));
     reachable = r.ok && j.ok;
     if (reachable) good(t("服务器响应正常（v{0}）", j.version));
@@ -500,7 +503,7 @@ async function stop({ quiet = false } = {}) {
 
 // ============================ status ============================
 async function fetchStatus(cfg) {
-  const r = await fetch(`${cfg.workerUrl}/api/status`, {
+  const r = await fetchRetry(`${cfg.workerUrl}/api/status`, {
     headers: { authorization: `Bearer ${cfg.authToken}` },
     signal: AbortSignal.timeout(15000),
   });
@@ -511,7 +514,7 @@ async function fetchStatus(cfg) {
   if (r.status === 401 && cfg.agentToken) {
     const healed = await tryHealToken(cfg);
     if (healed) {
-      const r2 = await fetch(`${cfg.workerUrl}/api/status`, {
+      const r2 = await fetchRetry(`${cfg.workerUrl}/api/status`, {
         headers: { authorization: `Bearer ${healed}` },
         signal: AbortSignal.timeout(15000),
       });
@@ -528,7 +531,7 @@ async function fetchStatus(cfg) {
 // 用 AGENT_TOKEN 读取 Worker 上的 AUTH_TOKEN 并写回本地配置
 async function tryHealToken(cfg) {
   try {
-    const r = await fetch(`${cfg.workerUrl}/api/admin/reveal-token`, {
+    const r = await fetchRetry(`${cfg.workerUrl}/api/admin/reveal-token`, {
       method: "POST",
       headers: { authorization: `Bearer ${cfg.agentToken}`, "content-type": "application/json" },
       body: JSON.stringify({ kind: "auth" }),
@@ -637,7 +640,7 @@ async function tokenCmd() {
     if (!cfg.workerUrl) { bad(t("尚未配置 Worker 地址")); return; }
     const tryToken = args[2] || cfg.authToken;
     try {
-      const r = await fetch(`${cfg.workerUrl}/api/admin/state`, {
+      const r = await fetchRetry(`${cfg.workerUrl}/api/admin/state`, {
         headers: { authorization: `Bearer ${tryToken}` },
         signal: AbortSignal.timeout(15000),
       });
@@ -701,7 +704,7 @@ async function test() {
 
   console.log(t("{0}1/4 Worker 健康检查{1}", C.dim, C.r));
   try {
-    const r = await fetch(`${cfg.workerUrl}/api/health`, { signal: AbortSignal.timeout(15000) });
+    const r = await fetchRetry(`${cfg.workerUrl}/api/health`, { signal: AbortSignal.timeout(15000) });
     const j = await r.json();
     good(t("Worker 在线 v{0}", j.version));
   } catch (e) { bad(t("不可达：{0}", e.message)); return; }
@@ -752,7 +755,7 @@ async function mcpCall(cfg, sid, payload, { notify = false } = {}) {
     "mcp-protocol-version": "2025-06-18",
   };
   if (sid) headers["mcp-session-id"] = sid;
-  const r = await fetch(`${cfg.workerUrl}/mcp`, {
+  const r = await fetchRetry(`${cfg.workerUrl}/mcp`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -879,6 +882,10 @@ async function enrollCmd(opts = {}) {
     if (e.reason === "used") tip(t("一个配置码只能用一次；请回后台重新生成。"));
     else if (e.reason === "expired") tip(t("配置码有时效，过期了就在后台重新生成一个。"));
     else if (e.reason === "notfound") tip(t("码无效、已被撤销或已过期。"));
+    else if (e.network) {
+      tip(t("网络不通：先确认这台机器能访问外网，再试一次。"));
+      tip(t("自测：curl -sS -o /dev/null -w \"%{http_code}\\n\" {0}/api/health", base));
+    }
     return;
   }
 
@@ -901,7 +908,7 @@ async function adminPassCmd() {
   if (pw && pw.length < 8) { bad(t("密码至少 8 位")); return; }
 
   try {
-    const r = await fetch(`${cfg.workerUrl}/api/auth/reset`, {
+    const r = await fetchRetry(`${cfg.workerUrl}/api/auth/reset`, {
       method: "POST",
       headers: { authorization: `Bearer ${cfg.authToken}`, "content-type": "application/json" },
       body: JSON.stringify({ password: pw }),
@@ -986,7 +993,7 @@ async function domainCmd() {
     const dns = await cf.resolveHost(hostname);
     if (!dns.v4.length && !dns.v6.length) continue;
     try {
-      const r = await fetch(`https://${hostname}/api/health`, { signal: AbortSignal.timeout(10000) });
+      const r = await fetchRetry(`https://${hostname}/api/health`, { signal: AbortSignal.timeout(10000) });
       if (r.ok) { ready = true; break; }
     } catch { }
   }

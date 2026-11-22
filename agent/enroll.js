@@ -6,6 +6,7 @@
 //   - 兑换成功后立刻作废，重复兑换返回 410。
 //   - 过期后记录被删除，码再也解不出任何东西。
 import { loadConfig, saveConfig, normalizeUrl, isConfigured } from "./config.js";
+import { fetchRetry, explainError } from "./net.js";
 
 const ENROLL_RE = /^[A-Za-z0-9_-]{20,200}$/;
 const LINK_PREFIX = "tmcp1_";
@@ -55,7 +56,7 @@ export async function redeemCode({ code, workerUrl, name, deviceId, signal }) {
   const base = normalizeUrl(workerUrl) || normalizeUrl(parsed.workerUrl);
   if (!base) throw new Error("需要先知道 Worker 地址：tmcp enroll <地址> <注册码>");
 
-  const r = await fetch(`${base}/api/enroll/redeem`, {
+  const r = await fetchRetry(`${base}/api/enroll/redeem`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ code: cleaned, name: name || "", deviceId: deviceId || "" }),

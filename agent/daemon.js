@@ -3,7 +3,10 @@
 import { Agent, VERSION } from "./agent.js";
 import { loadConfig, isConfigured, writePid, clearPid, ensureDirs, STATE_DIR, LOG_DIR } from "./config.js";
 import { t } from "./i18n.js";
+import { preferIPv4 } from "./net.js";
 import path from "node:path";
+
+preferIPv4();
 
 const cfg = loadConfig();
 if (!isConfigured(cfg)) {

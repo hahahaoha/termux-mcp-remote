@@ -280,6 +280,8 @@ export default {
   "配置码不完整，可能复制时漏了字符，请重新复制": "The code looks truncated; copy it again",
   "已从码中识别到 Worker：{0}": "Worker found in the code: {0}",
   "{0}这个码里没有地址，需要手动填一次 Worker 地址。{1}": "{0}This code has no address; enter the Worker URL once.{1}",
+  "网络不通：先确认这台机器能访问外网，再试一次。": "Network problem: make sure this machine can reach the internet, then try again.",
+  "自测：curl -sS -o /dev/null -w \"%{http_code}\\n\" {0}/api/health": "Self-check: curl -sS -o /dev/null -w \"%{http_code}\\n\" {0}/api/health",
   "（建议 chmod 600）": "(chmod 600 recommended)",
   "（需要 >=20）": "(requires >= 20)",
 };
