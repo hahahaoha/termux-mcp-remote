@@ -237,10 +237,11 @@ else
       if [ -n "$DRY_RUN" ]; then
         dim "  [dry-run] would install nvm into $NVM_DIR"
       else
+        dim "  fetching the nvm installer (about 10 s)..."
         for u in \
           "https://gh-proxy.org/https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh" \
           "https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh"; do
-          if curl -fsSL --connect-timeout 15 --max-time 180 "$u" 2>/dev/null | bash >/dev/null 2>&1; then
+          if curl -fsSL --connect-timeout 10 --max-time 60 "$u" 2>/dev/null | bash >/dev/null 2>&1; then
             break
           fi
         done

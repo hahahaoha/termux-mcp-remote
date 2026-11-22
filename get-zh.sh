@@ -220,10 +220,11 @@ else
     warn "系统 Node 仍不可用，改用 nvm 安装到用户目录（不需要 root）"
     export NVM_DIR="$HOME/.nvm"
     if [ ! -s "$NVM_DIR/nvm.sh" ]; then
+      dim "  正在下载 nvm 安装器（约 10 秒）…"
       for u in \
         "https://gh-proxy.org/https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh" \
         "https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh"; do
-        if curl -fsSL --connect-timeout 15 --max-time 180 "$u" 2>/dev/null | bash >/dev/null 2>&1; then
+        if curl -fsSL --connect-timeout 10 --max-time 60 "$u" 2>/dev/null | bash >/dev/null 2>&1; then
           break
         fi
       done
