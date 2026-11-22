@@ -2,8 +2,8 @@
 # termux-mcp-remote - one-line installer
 #
 # Usage (pick one):
-#   curl -fsSL https://cdn.jsdelivr.net/gh/hahahaoha/termux-mcp-remote@main/get.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
+#   curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
 #   bash get.sh                      # already downloaded
 #
 # Options / environment variables:
@@ -61,7 +61,7 @@ usage() {
 termux-mcp-remote - one-line installer
 
 Usage:
-  curl -fsSL https://cdn.jsdelivr.net/gh/hahahaoha/termux-mcp-remote@main/get.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
   bash get.sh [options]
 
 Options:
@@ -103,7 +103,7 @@ while [ $# -gt 0 ]; do
     --lang)
       case "${2:-}" in
         zh*) die "Chinese output lives in get-zh.sh. Use:
-  curl -fsSL https://cdn.jsdelivr.net/gh/hahahaoha/termux-mcp-remote@main/get-zh.sh | bash" ;;
+  curl -fsSL https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get-zh.sh | bash" ;;
         *) shift 2 ;;
       esac ;;
     -h|--help)  usage; exit 0 ;;

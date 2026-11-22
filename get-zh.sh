@@ -2,8 +2,8 @@
 # termux-mcp-remote - 一键安装（中文版）
 #
 # 用法（任选其一）：
-#   curl -fsSL https://cdn.jsdelivr.net/gh/hahahaoha/termux-mcp-remote@main/get-zh.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get-zh.sh | bash
+#   curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get-zh.sh | bash
 #   bash get-zh.sh                   # 已下载到本地
 #
 # 参数 / 环境变量：
@@ -57,7 +57,7 @@ usage() {
 termux-mcp-remote - 一键安装（中文版）
 
 用法：
-  curl -fsSL https://cdn.jsdelivr.net/gh/hahahaoha/termux-mcp-remote@main/get-zh.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get-zh.sh | bash
   bash get-zh.sh [参数]
 
 参数：
