@@ -25,11 +25,21 @@ Agent（Termux / Debian / Ubuntu / 树莓派 / 任意 Linux）
 
 ### 一行命令（推荐）
 
+安装脚本有两个版本，内容完全一致，只是输出语言不同：
+
+**English**
+
 ```bash
 curl -fsSL https://cdn.jsdelivr.net/gh/hahahaoha/termux-mcp-remote@main/get.sh | bash
 ```
 
-国内网络如果 jsDelivr 慢，可以换源：
+**中文**
+
+```bash
+curl -fsSL https://cdn.jsdelivr.net/gh/hahahaoha/termux-mcp-remote@main/get-zh.sh | bash
+```
+
+国内网络如果 jsDelivr 慢，可以换源（两个脚本通用）：
 
 ```bash
 # GitHub 直连
@@ -42,7 +52,7 @@ curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/hahahaoha/termu
 脚本会依次尝试 codeload → ghproxy → ghfast → github 下载代码包，任何一个通就行。
 Node.js 缺失时在 Termux 上会自动 `pkg install nodejs-lts`（Linux 会提示安装方法）。
 
-常用参数：
+常用参数（`get-zh.sh` 与 `get.sh` 完全相同）：
 
 ```bash
 # 装到指定目录
@@ -59,7 +69,7 @@ bash get.sh --dir /opt/new --force
 ```
 
 > **安全保护**：如果检测到已有另一个位置的安装，脚本会**中止并且不改动任何文件**，
-> 而不是悄悄覆盖你的 `tmcp` 命令。
+> 而不是悄悄覆盖你的 `tmcp` 命令。必须显式加 `--force` 才会切换。
 
 ### 手动安装
 
@@ -67,7 +77,7 @@ bash get.sh --dir /opt/new --force
 git clone https://github.com/hahahaoha/termux-mcp-remote.git
 cd termux-mcp-remote
 npm install
-bash install.sh              # 安装 tmcp 命令
+bash install.sh              # 安装 tmcp 命令（跟随 $LANG 自动中/英文）
 ```
 
 需要 Node.js >= 20。
