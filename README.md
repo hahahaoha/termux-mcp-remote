@@ -47,6 +47,7 @@ curl -fsSL https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/ge
 > ```
 >
 > 注意代理域名是 **`gh-proxy.org`**，`gh-proxy.com` 只是官网，直接拿它拼路径会返回 403。
+> 代理层有 60 秒缓存，刚推完代码可能还是上一版，稍等即可。
 >
 > 其他可用的源：
 >
