@@ -30,40 +30,37 @@ Agent（Termux / Debian / Ubuntu / 树莓派 / 任意 Linux）
 **English**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
+curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
 ```
 
 **中文**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get-zh.sh | bash
+curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get-zh.sh | bash
 ```
 
-> **关于下载源**：上面用的是 GitHub raw，拿到的永远是最新版本。
-> 如果 GitHub 访问不了，推荐用 gh-proxy（国内速度最好，实测 0.9 秒）：
->
-> ```bash
-> curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
-> ```
->
-> 注意代理域名是 **`gh-proxy.org`**，`gh-proxy.com` 只是官网，直接拿它拼路径会返回 403。
-> 代理层有 60 秒缓存，刚推完代码可能还是上一版，稍等即可。
->
-> 其他可用的源：
->
-> ```bash
-> # ghproxy（较慢但稳定）
-> curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
->
-> # ghfast
-> curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
->
-> # jsDelivr —— 必须带 commit hash，不能用 @main（分支有 12 小时缓存）
-> curl -fsSL https://cdn.jsdelivr.net/gh/hahahaoha/termux-mcp-remote@<hash>/get.sh | bash
-> ```
+> 默认走 **gh-proxy**（国内实测 0.9 秒，比直连还快一点）。
+> 注意代理域名是 **`gh-proxy.org`**，`gh-proxy.com` 只是官网，直接拼路径会返回 403。
+> 它只有 60 秒缓存，刚推完代码稍等一下就是新版。
 
-脚本内部会依次尝试 codeload → gh-proxy → ghproxy → ghfast → github 下载代码包，任何一个通就行，
-所以即使拉脚本用的是代理，后续也能自动走可用的源。
+如果 gh-proxy 不通，可以换这些源（内容一样）：
+
+```bash
+# GitHub 直连（永远最新，但国内可能连不上）
+curl -fsSL https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
+
+# ghfast
+curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
+
+# ghproxy（较慢，实测 12 秒）
+curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
+
+# jsDelivr —— 必须带 commit hash，不能用 @main（分支有 12 小时缓存）
+curl -fsSL https://cdn.jsdelivr.net/gh/hahahaoha/termux-mcp-remote@<hash>/get.sh | bash
+```
+
+脚本下载代码包时也会按 **gh-proxy → codeload → ghproxy → ghfast → github → git clone**
+的顺序自动回退，所以只要有一个源通就能装完。
 Node.js 缺失时在 Termux 上会自动 `pkg install nodejs-lts`（Linux 会提示安装方法）。
 
 常用参数（`get-zh.sh` 与 `get.sh` 完全相同）：
@@ -77,6 +74,9 @@ bash get.sh --dir ~/termux-mcp-remote
 
 # 跳过 npm install（依赖已装好）
 bash get.sh --no-deps
+
+# 指定下载源
+bash get.sh --mirror gh-proxy
 
 # 确认要覆盖另一个位置的 tmcp 命令
 bash get.sh --dir /opt/new --force

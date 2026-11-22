@@ -2,8 +2,8 @@
 # termux-mcp-remote - 一键安装（中文版）
 #
 # 用法（任选其一）：
+#   curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get-zh.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get-zh.sh | bash
-#   curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get-zh.sh | bash
 #   bash get-zh.sh                   # 已下载到本地
 #
 # 参数 / 环境变量：
@@ -57,7 +57,7 @@ usage() {
 termux-mcp-remote - 一键安装（中文版）
 
 用法：
-  curl -fsSL https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get-zh.sh | bash
+  curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get-zh.sh | bash
   bash get-zh.sh [参数]
 
 参数：
@@ -214,9 +214,11 @@ try_mirror() {
 }
 
 ENC_BRANCH=$(printf '%s' "$BRANCH" | sed 's|/|%2F|g')
-# 注意：jsDelivr 不能提供 tarball（对 @main 会 404），它只用于加速获取本脚本。
-try_mirror "codeload" "https://codeload.github.com/$REPO/tar.gz/refs/heads/$ENC_BRANCH" || \
+# gh-proxy 放第一位：受限网络下最快（约 0.9 秒），缓存只有 60 秒。
+# codeload（GitHub 直连）作为备选。
+# jsDelivr 不能提供 tarball（对 @main 会 404）且分支缓存 12 小时，这里完全不使用。
 try_mirror "gh-proxy" "https://gh-proxy.org/https://github.com/$REPO/archive/refs/heads/$ENC_BRANCH.tar.gz" || \
+try_mirror "codeload" "https://codeload.github.com/$REPO/tar.gz/refs/heads/$ENC_BRANCH" || \
 try_mirror "ghproxy"  "https://ghproxy.net/https://github.com/$REPO/archive/refs/heads/$ENC_BRANCH.tar.gz" || \
 try_mirror "ghfast"   "https://ghfast.top/https://github.com/$REPO/archive/refs/heads/$ENC_BRANCH.tar.gz" || \
 try_mirror "github"   "https://github.com/$REPO/archive/refs/heads/$ENC_BRANCH.tar.gz" || true

@@ -2,8 +2,8 @@
 # termux-mcp-remote - one-line installer
 #
 # Usage (pick one):
+#   curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
-#   curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
 #   bash get.sh                      # already downloaded
 #
 # Options / environment variables:
@@ -61,7 +61,7 @@ usage() {
 termux-mcp-remote - one-line installer
 
 Usage:
-  curl -fsSL https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
+  curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/hahahaoha/termux-mcp-remote/main/get.sh | bash
   bash get.sh [options]
 
 Options:
@@ -225,10 +225,12 @@ try_mirror() {
 }
 
 ENC_BRANCH=$(printf '%s' "$BRANCH" | sed 's|/|%2F|g')
-# Note: jsDelivr cannot serve tarballs (404 for @main); it is only used to
-# fetch this script quickly, not the code archive.
-try_mirror "codeload" "https://codeload.github.com/$REPO/tar.gz/refs/heads/$ENC_BRANCH" || \
+# gh-proxy first: it is the fastest option on restrictive networks (~0.9s),
+# and its cache is only 60s. codeload (GitHub direct) is the fallback.
+# Note: jsDelivr cannot serve tarballs (404 for @main) and caches branches for
+# 12 hours, so it is not used here at all.
 try_mirror "gh-proxy" "https://gh-proxy.org/https://github.com/$REPO/archive/refs/heads/$ENC_BRANCH.tar.gz" || \
+try_mirror "codeload" "https://codeload.github.com/$REPO/tar.gz/refs/heads/$ENC_BRANCH" || \
 try_mirror "ghproxy"  "https://ghproxy.net/https://github.com/$REPO/archive/refs/heads/$ENC_BRANCH.tar.gz" || \
 try_mirror "ghfast"   "https://ghfast.top/https://github.com/$REPO/archive/refs/heads/$ENC_BRANCH.tar.gz" || \
 try_mirror "github"   "https://github.com/$REPO/archive/refs/heads/$ENC_BRANCH.tar.gz" || true
