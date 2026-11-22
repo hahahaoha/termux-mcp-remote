@@ -148,6 +148,13 @@ fi
 ok "platform $PLATFORM, command will be installed to $BIN_DIR"
 
 # install one or more packages with the platform's package manager
+PM_LABEL="package manager"
+case "$PLATFORM" in
+  termux) PM_LABEL="pkg" ;; debian) PM_LABEL="apt" ;; alpine) PM_LABEL="apk" ;;
+  fedora) PM_LABEL="dnf" ;; arch) PM_LABEL="pacman" ;; suse) PM_LABEL="zypper" ;;
+  mac) PM_LABEL="brew" ;;
+esac
+
 pm_install() {
   if [ "$NO_SYSTEM_DEPS" = 1 ]; then
     return 1
@@ -156,16 +163,22 @@ pm_install() {
     dim "  [dry-run] would install: $*"
     return 0
   fi
+  # 重要：所有包管理器都 </dev/null
+  # 通过 `curl | bash` 运行时 stdin 就是脚本本身，包管理器一旦读 stdin
+  # 会把脚本内容吃掉，表现为"卡住不动"。
+  printf '%s  running: %s %s%s\n' "$D" "$PM_LABEL" "$*" "$R"
   case "$PLATFORM" in
-    termux) pkg install -y "$@" >/dev/null 2>&1 ;;
+    termux) pkg install -y "$@" </dev/null ;;
     debian) { [ -n "$SUDO" ] || [ "$(id -u)" = "0" ]; } || return 1
-            $SUDO apt-get update -qq >/dev/null 2>&1
-            $SUDO apt-get install -y "$@" >/dev/null 2>&1 ;;
-    alpine) $SUDO apk add --no-cache "$@" >/dev/null 2>&1 ;;
-    fedora) $SUDO dnf install -y "$@" >/dev/null 2>&1 ;;
-    arch)   $SUDO pacman -Sy --noconfirm "$@" >/dev/null 2>&1 ;;
-    suse)   $SUDO zypper -n install -y "$@" >/dev/null 2>&1 ;;
-    mac)    have brew && brew install "$@" >/dev/null 2>&1 ;;
+            $SUDO apt-get update -qq </dev/null
+            DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y \
+              -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+              "$@" </dev/null ;;
+    alpine) $SUDO apk add --no-cache "$@" </dev/null ;;
+    fedora) $SUDO dnf install -y "$@" </dev/null ;;
+    arch)   $SUDO pacman -Sy --noconfirm --needed "$@" </dev/null ;;
+    suse)   $SUDO zypper -n install -y "$@" </dev/null ;;
+    mac)    have brew && HOMEBREW_NO_AUTO_UPDATE=1 brew install "$@" </dev/null ;;
     *) return 1 ;;
   esac
 }
@@ -205,6 +218,7 @@ if node_ok; then
 else
   if have node; then warn "Node.js $(node -v 2>/dev/null || echo '?') is too old, need >= 20"; else warn "Node.js not found"; fi
 
+  dim "  Node.js is required; downloading it can take a few minutes. Please wait..."
   case "$PLATFORM" in
     termux) pm_install nodejs-lts || pm_install nodejs ;;
     mac)    pm_install node ;;
@@ -235,7 +249,8 @@ else
     if [ -s "$NVM_DIR/nvm.sh" ]; then
       # shellcheck disable=SC1091
       . "$NVM_DIR/nvm.sh"
-      nvm install 22 >/dev/null 2>&1 || true
+      dim "  downloading Node.js via nvm (~25 MB), please wait..."
+      nvm install 22 </dev/null || true
       NB="$(dirname "$(nvm which 22 2>/dev/null || echo "")" 2>/dev/null || true)"
       [ -n "$NB" ] && [ -d "$NB" ] && PATH="$NB:$PATH"
     fi
@@ -414,7 +429,7 @@ if [ "$SKIP_DEPS" = 0 ]; then
     warn "npm is not available; skipping (run 'npm install' in $TARGET_DIR later)"
   else
     dim "  npm install (the first run takes a moment)..."
-    if (cd "$TARGET_DIR" && "$NPM_BIN" install --no-audit --no-fund --omit=dev >/dev/null 2>&1); then
+    if (cd "$TARGET_DIR" && "$NPM_BIN" install --no-audit --no-fund --omit=dev </dev/null >/dev/null 2>&1); then
       ok "dependencies installed"
     else
       warn "npm install failed; run it manually later in $TARGET_DIR"

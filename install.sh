@@ -55,15 +55,17 @@ say "Command:     $BIN_DIR/tmcp" "命令路径: $BIN_DIR/tmcp"
 
 pm_install() {
   [ -n "$DRY_RUN" ] && { say "  would install: $*" "  [预览] 将安装: $*"; return 0; }
+  # everything gets </dev/null: under `curl | bash` stdin is the script itself
+  say "  running: $*" "  正在执行: $*"
   case "$PLATFORM" in
-    termux) pkg install -y "$@" >/dev/null 2>&1 ;;
+    termux) pkg install -y "$@" </dev/null ;;
     debian) { [ -n "$SUDO" ] || [ "$(id -u)" = "0" ]; } || return 1
-            $SUDO apt-get update -qq >/dev/null 2>&1
-            $SUDO apt-get install -y "$@" >/dev/null 2>&1 ;;
-    alpine) $SUDO apk add --no-cache "$@" >/dev/null 2>&1 ;;
-    fedora) $SUDO dnf install -y "$@" >/dev/null 2>&1 ;;
-    arch)   $SUDO pacman -Sy --noconfirm "$@" >/dev/null 2>&1 ;;
-    mac)    have brew && brew install "$@" >/dev/null 2>&1 ;;
+            $SUDO apt-get update -qq </dev/null
+            DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y "$@" </dev/null ;;
+    alpine) $SUDO apk add --no-cache "$@" </dev/null ;;
+    fedora) $SUDO dnf install -y "$@" </dev/null ;;
+    arch)   $SUDO pacman -Sy --noconfirm --needed "$@" </dev/null ;;
+    mac)    have brew && HOMEBREW_NO_AUTO_UPDATE=1 brew install "$@" </dev/null ;;
     *) return 1 ;;
   esac
 }
@@ -137,7 +139,7 @@ if [ ! -d "$ROOT/node_modules" ]; then
     say "→ would run npm install" "→ 将执行 npm install"
   else
     say "→ Installing dependencies..." "→ 安装依赖…"
-    (cd "$ROOT" && npm install --no-audit --no-fund) || {
+    (cd "$ROOT" && npm install --no-audit --no-fund </dev/null) || {
       warn "npm install failed" "npm install 失败"
     }
   fi

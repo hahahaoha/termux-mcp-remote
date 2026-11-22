@@ -135,6 +135,13 @@ fi
 
 ok "平台 $PLATFORM，命令将安装到 $BIN_DIR"
 
+PM_LABEL="包管理器"
+case "$PLATFORM" in
+  termux) PM_LABEL="pkg" ;; debian) PM_LABEL="apt" ;; alpine) PM_LABEL="apk" ;;
+  fedora) PM_LABEL="dnf" ;; arch) PM_LABEL="pacman" ;; suse) PM_LABEL="zypper" ;;
+  mac) PM_LABEL="brew" ;;
+esac
+
 pm_install() {
   if [ "$NO_SYSTEM_DEPS" = 1 ]; then
     return 1
@@ -143,16 +150,22 @@ pm_install() {
     dim "  [预览] 将执行安装: $*"
     return 0
   fi
+  # 关键：所有包管理器都 </dev/null。
+  # 通过 `curl | bash` 跑时 stdin 就是脚本本身，包管理器一旦读 stdin
+  # 就会把脚本内容当输入吃掉，表现为“卡住不动”。
+  printf '%s  正在执行: %s %s%s\n' "$D" "$PM_LABEL" "$*" "$R"
   case "$PLATFORM" in
-    termux) pkg install -y "$@" >/dev/null 2>&1 ;;
+    termux) pkg install -y "$@" </dev/null ;;
     debian) { [ -n "$SUDO" ] || [ "$(id -u)" = "0" ]; } || return 1
-            $SUDO apt-get update -qq >/dev/null 2>&1
-            $SUDO apt-get install -y "$@" >/dev/null 2>&1 ;;
-    alpine) $SUDO apk add --no-cache "$@" >/dev/null 2>&1 ;;
-    fedora) $SUDO dnf install -y "$@" >/dev/null 2>&1 ;;
-    arch)   $SUDO pacman -Sy --noconfirm "$@" >/dev/null 2>&1 ;;
-    suse)   $SUDO zypper -n install -y "$@" >/dev/null 2>&1 ;;
-    mac)    have brew && brew install "$@" >/dev/null 2>&1 ;;
+            $SUDO apt-get update -qq </dev/null
+            DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y \
+              -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+              "$@" </dev/null ;;
+    alpine) $SUDO apk add --no-cache "$@" </dev/null ;;
+    fedora) $SUDO dnf install -y "$@" </dev/null ;;
+    arch)   $SUDO pacman -Sy --noconfirm --needed "$@" </dev/null ;;
+    suse)   $SUDO zypper -n install -y "$@" </dev/null ;;
+    mac)    have brew && HOMEBREW_NO_AUTO_UPDATE=1 brew install "$@" </dev/null ;;
     *) return 1 ;;
   esac
 }
@@ -192,6 +205,7 @@ if node_ok; then
 else
   if have node; then warn "Node.js $(node -v 2>/dev/null || echo '?') 版本过低，需要 >= 20"; else warn "未找到 Node.js"; fi
 
+  dim "  需要 Node.js，下载可能要几分钟，请耐心等待…"
   case "$PLATFORM" in
     termux) pm_install nodejs-lts || pm_install nodejs ;;
     mac)    pm_install node ;;
@@ -216,7 +230,8 @@ else
     fi
     if [ -s "$NVM_DIR/nvm.sh" ]; then
       . "$NVM_DIR/nvm.sh"
-      nvm install 22 >/dev/null 2>&1 || true
+      dim "  正在通过 nvm 下载 Node.js（约 25 MB），请等待…"
+      nvm install 22 </dev/null || true
       NB="$(dirname "$(nvm which 22 2>/dev/null || echo "")" 2>/dev/null || true)"
       [ -n "$NB" ] && [ -d "$NB" ] && PATH="$NB:$PATH"
     fi
@@ -395,7 +410,7 @@ if [ "$SKIP_DEPS" = 0 ]; then
     warn "没有 npm，跳过（稍后可在 $TARGET_DIR 手动 npm install）"
   else
     dim "  npm install（首次会慢一些）…"
-    if (cd "$TARGET_DIR" && "$NPM_BIN" install --no-audit --no-fund --omit=dev >/dev/null 2>&1); then
+    if (cd "$TARGET_DIR" && "$NPM_BIN" install --no-audit --no-fund --omit=dev </dev/null >/dev/null 2>&1); then
       ok "依赖安装完成"
     else
       warn "npm install 失败；可稍后在 $TARGET_DIR 手动执行"
