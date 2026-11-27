@@ -70,6 +70,7 @@ async function main() {
     case "admin-pass": case "passwd": return adminPassCmd();
     case "enroll": return enrollCmd();
     case "lang": return langCmd();
+    case "rename": return renameCmd();
     case "help": case "-h": case "--help": return help();
     case "-v": case "--version": return version();
     default:
@@ -141,6 +142,7 @@ function bad(s) { console.log(`${C.red}✗${C.r} ${s}`); }
 function help() {
   console.log(t("{0}termux-mcp-remote{1} —— 用 Cloudflare Worker 远程使用 Termux 终端\n\n{2}用法{3}\n  tmcp                 交互式菜单\n  tmcp setup           配置向导（首次使用）\n  tmcp deploy          用 wrangler 部署 Worker 并自动写入密钥\n  tmcp start           后台启动 Agent（守护进程）\n  tmcp stop            停止 Agent\n  tmcp status          查看连接状态\n  tmcp logs [-f]       查看日志\n  tmcp token [rotate]  查看 / 轮换访问令牌\n  tmcp url <地址>      修改 Worker 地址\n  tmcp test            本地自检（MCP 握手 + 工具调用）\n  tmcp doctor          环境体检\n  tmcp panel           本地应急面板（只监听 127.0.0.1；日常用 Worker 的 /admin）\n  tmcp domain          给 Worker 绑定自有域名（解决 workers.dev 被污染）\n  tmcp admin-pass      设置 / 重置后台登录密码（与 API token 无关）\n  tmcp enroll [地址] [配置码]   用一次性配置码一键配置（地址+密钥）\n\n{4}典型流程{5}\n  tmcp deploy      {6}# 一次性，部署 Worker 并生成 token{7}\n  tmcp setup       {8}# 确认地址（直接回车用刚部署的）{9}\n  tmcp start       {10}# 让手机连上 Worker{11}\n\n{12}客户端配置{13}\n  URL:      https://<你的-worker>/mcp\n  请求头:   Authorization: Bearer <AUTH_TOKEN>\n", C.b, C.r, C.b, C.r, C.b, C.r, C.dim, C.r, C.dim, C.r, C.dim, C.r, C.b, C.r));
   console.log(t("  tmcp lang [en|zh]    切换界面语言"));
+  console.log(t("  tmcp rename <id>     修改本机设备 id（多台同名设备时用）"));
 }
 
 async function version() {
@@ -803,6 +805,34 @@ function maskHost(url) {
   } catch {
     return "***";
   }
+}
+
+// ============================ rename ============================
+// 改本机的设备 id / 显示名。设备 id 是 Worker 路由用的键，必须唯一。
+async function renameCmd() {
+  const cfg = loadConfig();
+  const id = String(args[1] || "").trim().toLowerCase();
+  if (!id) {
+    const cur = cfg.deviceId || deviceIdGuess(cfg);
+    console.log(t("当前设备 id：{0}", cur));
+    console.log(t("用法：tmcp rename <新id> [显示名]"));
+    console.log(t("只允许小写字母、数字、. _ -，最长 64 位"));
+    return;
+  }
+  if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(id)) {
+    bad(t("设备 id 不合法：只能用小写字母、数字、. _ -，且不超过 64 位"));
+    return;
+  }
+  const name = args[2] ? String(args[2]).trim().slice(0, 64) : cfg.name;
+  saveConfig({ ...cfg, deviceId: id, name });
+  good(t("已把本机设备 id 设为 {0}", id));
+  if (name && name !== cfg.name) tip(t("显示名：{0}", name));
+  if (pidAlive(readPid())) tip(t("重启后生效：tmcp restart"));
+}
+
+function deviceIdGuess(cfg) {
+  return (cfg.name || os.hostname() || "device")
+    .toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "device";
 }
 
 // ============================ lang ============================

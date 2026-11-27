@@ -9,10 +9,12 @@ export class AgentHub {
     this.state = state;
     this.env = env;
     this.dead = new WeakSet();
-    this.live = new Map();     // deviceId -> ws
+    this.live = new Map();     // deviceId -> ws（只在 hello 通过后登记）
+    this.pending = new Map();  // ws -> 期望的 deviceId（还没 hello）
     this.core = new HubCore({ send: sendJSON, log: (m) => console.log("[hub]", m) });
     this.core.setSockets(() => this.sockets());
     this.core.setSendFail((ws) => this.dropDead(ws));
+    this.core.setOnHello((ws, msg) => this.onHello(ws, msg));
   }
 
   // 只返回真正可用的 socket
@@ -28,10 +30,57 @@ export class AgentHub {
     // DO 被唤醒后 this.live 是空的，从 hibernation 里恢复
     const restored = this.state.getWebSockets("agent").filter((ws) => !this.dead.has(ws));
     for (const ws of restored) {
-      const id = ws.deserializeAttachment()?.deviceId || "default";
+      const att = ws.deserializeAttachment() || {};
+      if (!att.confirmed) continue;
+      const id = att.deviceId || "default";
+      this.core.hydrate(ws, att);
       if (!this.live.has(id)) this.live.set(id, ws);
     }
     return [...this.live.values()];
+  }
+
+  // 决定这条连接最终用哪个 deviceId。
+  //  - 同一台机器重连（instanceId 相同）→ 顶掉旧连接，沿用原 id
+  //  - 另一台机器撞名（instanceId 不同）→ 给新来的换个 id 并让它改名
+  onHello(ws, msg) {
+    this.sockets();   // DO 刚被唤醒时 live 是空的，先从 hibernation 恢复
+    const desired = sanitizeId(msg?.deviceId) || this.pending.get(ws) || "default";
+    const inst = String(msg?.instanceId || "").slice(0, 32);
+
+    const existing = this.live.get(desired);
+    if (existing && existing !== ws) {
+      const old = this.core.deviceMeta(existing);
+      const sameMachine = !!(inst && old.instanceId && old.instanceId === inst);
+      if (sameMachine) {
+        this.dead.add(existing);
+        this.live.delete(desired);
+        try { existing.close(4001, "replaced by a newer connection"); } catch { }
+      } else {
+        // 撞名：算一个空闲 id，通知对端改名后断开，不进入 live
+        let n = 2;
+        let cand = `${desired}-${n}`;
+        while (this.live.has(cand) && n < 100) { n++; cand = `${desired}-${n}`; }
+        this.pending.delete(ws);
+        console.log("[hub] id collision:", desired, inst, "->", cand);
+        try { sendJSON(ws, { t: "rename-to", deviceId: cand, reason: "id-taken" }); } catch { }
+        // 不能立刻 close：消息可能还没发出去。留 500ms 让它收到并自己断开重连。
+        setTimeout(() => { try { ws.close(4003, "device id already in use"); } catch { } }, 500);
+        return false;
+      }
+    }
+
+    this.live.set(desired, ws);
+    this.pending.delete(ws);
+    try {
+      const m = this.core.deviceMeta(ws);
+      ws.serializeAttachment({
+        deviceId: desired, instanceId: inst, confirmed: true, since: Date.now(),
+        name: m.name, version: m.version, host: m.host, os: m.os,
+        distro: m.distro, arch: m.arch, tools: m.tools,
+        connectedAt: m.connectedAt, lastSeen: m.lastSeen,
+      });
+    } catch { }
+    return desired;
   }
 
   dropDead(ws) {
@@ -59,19 +108,13 @@ export class AgentHub {
     const deviceId = sanitizeId(url.searchParams.get("device")) || "default";
     const build = url.searchParams.get("build") || "dev";
 
-    // 同一设备重复连接：顶掉旧的，避免双写
-    const existing = this.live.get(deviceId);
-    if (existing) {
-      this.dead.add(existing);
-      this.live.delete(deviceId);
-      try { existing.close(4001, "replaced by a newer connection"); } catch { }
-    }
-
+    // 先挂到 pending，等 hello 里拿到 instanceId 再决定是否顶掉旧连接，
+    // 否则两台同名机器会互相踢，永远连不上。
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
-    server.serializeAttachment({ deviceId, since: Date.now() });
+    server.serializeAttachment({ deviceId, confirmed: false, since: Date.now() });
     this.state.acceptWebSocket(server, ["agent"]);
-    this.live.set(deviceId, server);
+    this.pending.set(server, deviceId);
     this.core.onOpen(server, deviceId, build);
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -107,12 +150,14 @@ export class AgentHub {
   }
 
   async webSocketClose(ws, code, reason) {
+    this.pending.delete(ws);
     this.dead.add(ws);
     for (const [id, s] of this.live) if (s === ws) this.live.delete(id);
     this.core.onClose(ws, code, reason);
   }
 
   async webSocketError(ws, err) {
+    this.pending.delete(ws);
     this.dead.add(ws);
     for (const [id, s] of this.live) if (s === ws) this.live.delete(id);
     console.warn("[hub] ws error:", err?.message || err);

@@ -21,6 +21,7 @@ export const DEFAULTS = {
   maxShells: 6,
   shellIdleMs: 30 * 60 * 1000,
   enrolledAt: null,       // 通过注册码配置的时间（null = 手动配置）
+  instanceId: "",         // 这台机器这份安装的唯一指纹（区分同名设备）
 };
 
 export function ensureDirs() {

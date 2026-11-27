@@ -23,7 +23,7 @@ import { checkToken } from "./crypto.js";
 
 export { AgentHub, AuthStore, Settings, AdminAuth, EnrollStore };
 
-const HUB_NAME = "hub-v4";
+const HUB_NAME = "hub-v5";
 
 export default {
   async fetch(request, env) {
@@ -215,6 +215,25 @@ async function handleAdminApi(request, env, settings, path) {
     case "/api/admin/kick": {
       const r = await kickDevice(env, body.device || null);
       return json({ ok: true, ...r });
+    }
+
+    case "/api/admin/device/rename": {
+      const from = String(body.device || "").toLowerCase();
+      const to = String(body.newId || "").trim().toLowerCase();
+      const newName = body.name === undefined ? undefined : String(body.name).trim().slice(0, 64);
+      if (!from) return json({ ok: false, error: "缺少设备 id" }, 400);
+      if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(to)) {
+        return json({ ok: false, error: "新的设备 id 不合法：只能用小写字母、数字、. _ -，且不超过 64 位" }, 400);
+      }
+      // 目标 id 不能已被别的在线设备占用
+      if (to !== from) {
+        const st = await getStatus(env).catch(() => ({ devices: [] }));
+        const busy = (st.devices || []).some((d) => d.id === to);
+        if (busy) return json({ ok: false, error: `设备 id「${to}」已被占用，换一个` }, 409);
+      }
+      const res = await callAgent(env, "__rename_device", { deviceId: to, name: newName }, 15000, from);
+      if (!res.ok) return json({ ok: false, error: res.error || "改名失败" }, 400);
+      return json({ ok: true, text: res.text, from, to });
     }
 
     case "/api/admin/device-info": {

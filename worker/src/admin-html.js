@@ -680,6 +680,7 @@ pre:empty::before{content:"（空）";color:var(--muted)}
         +'<div class="dev-acts">'
           +'<button data-act="sys" data-id="'+esc(d.id)+'">详情</button>'
           +'<button data-act="log" data-id="'+esc(d.id)+'">日志</button>'
+          +'<button data-act="rename" data-id="'+esc(d.id)+'" data-name="'+esc(d.name||"")+'">改名</button>'
           +'<button class="danger" data-act="kick" data-id="'+esc(d.id)+'">重连</button>'
         +'</div></div>';
     }).join("");
@@ -880,6 +881,18 @@ pre:empty::before{content:"（空）";color:var(--muted)}
       $("tab-sys").click(); $("sel-dev").value=id; $("btn-sys").click();
     }else if(act==="log"){
       $("tab-logs").click(); $("sel-dev-logs").value=id; $("btn-logs").click();
+    }else if(act==="rename"){
+      var curName=b.getAttribute("data-name")||"";
+      var nid=prompt("新的设备 id\n只能用小写字母、数字、. _ -（用来区分不同机器）\n\n当前：" + id, id);
+      if(!nid) return;
+      nid=String(nid).trim().toLowerCase();
+      if(nid===id) return;
+      var nn=prompt("显示名（可留空保持不变）", curName);
+      api("/api/admin/device/rename",{body:{device:id,newId:nid,name:(nn===null?undefined:nn)}}).then(function(r){
+        if(r && r.ok===false) throw new Error(r.error||"改名失败");
+        toast("已改名，设备正在用新 id 重连");
+        setTimeout(function(){load().catch(function(){})},1800);
+      }).catch(function(e){toast(e.message,true)});
     }
   });
 

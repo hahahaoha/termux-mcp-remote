@@ -10,7 +10,8 @@ import { t } from "./i18n.js";
 import { createAssembler, sendJSON } from "../shared/wsjson.js";
 import { TOOL_SPECS } from "../shared/tools.mjs";
 import z from "zod";
-import { loadConfig } from "./config.js";
+import { loadConfig, saveConfig } from "./config.js";
+import crypto from "node:crypto";
 import { Jobs } from "./jobs.js";
 import { deviceName, detectPlatform, systemInfo, cpuUsagePercent } from "./platform.js";
 import { Shells } from "./shells.js";
@@ -19,7 +20,7 @@ const execAsync = promisify(exec);
 export const VERSION = "1.0.0";
 
 // 仅供 Worker WebUI 调用，不暴露在 MCP 工具清单里
-const INTERNAL_TOOLS = new Set(["__sysinfo", "__logs"]);
+const INTERNAL_TOOLS = new Set(["__sysinfo", "__logs", "__rename_device"]);
 
 const MAX_OUTPUT = 8 * 1024 * 1024;
 const MAX_READ_BYTES = 2 * 1024 * 1024;
@@ -94,6 +95,39 @@ export class Agent {
     return `${base}/agent/ws?device=${id}`;
   }
 
+  // 这份安装的唯一指纹：两台机器都叫 localhost 时靠它区分
+  instanceId() {
+    if (!this.cfg.instanceId) {
+      this.cfg.instanceId = crypto.randomBytes(6).toString("hex");
+      try { saveConfig({ ...this.cfg, instanceId: this.cfg.instanceId }); } catch { }
+      this.log(t("生成设备指纹 {0}", this.cfg.instanceId));
+    }
+    return this.cfg.instanceId;
+  }
+
+  // 改名：写进配置并重连（由 WebUI 或 Worker 的撞名处理触发）
+  async applyRename(newId, newName) {
+    const id = String(newId || "").trim().toLowerCase();
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(id)) {
+      throw new Error(t("设备 id 不合法：只能是 a-z 0-9 . _ -，且不超过 64 位"));
+    }
+    const before = this.deviceId();
+    this.cfg.deviceId = id;
+    if (newName && String(newName).trim()) this.cfg.name = String(newName).trim().slice(0, 64);
+    saveConfig(this.cfg);
+    this.log(t("设备已改名：{0} → {1}", before, id) + (this.cfg.name ? ` (${this.cfg.name})` : ""));
+    // 给调用方一点时间把结果发回去，再断开重连
+    setTimeout(() => {
+      // 连接还活着就让它自己断开，close 回调里会安排重连，避免重复调度
+      if (this.ws && this.ws.readyState === 1) {
+        try { this.ws.close(4003, "renamed"); } catch { }
+      } else {
+        this.scheduleReconnect();
+      }
+    }, 400);
+    return { before, after: id, name: this.cfg.name };
+  }
+
   // 设备标识：优先配置里的 deviceId，否则由主机名派生
   deviceId() {
     if (this.cfg.deviceId) return this.cfg.deviceId;
@@ -115,7 +149,7 @@ export class Agent {
     this.log(t("连接 {0}", url));
     let ws;
     try {
-      ws = new WebSocket(url, { headers: { authorization: `Bearer ${this.cfg.agentToken}` } });
+      ws = new WebSocket(url, { headers: { authorization: `Bearer ${this.cfg.agentToken}` }, handshakeTimeout: 15000 });
     } catch (e) {
       this.log(t("创建 WebSocket 失败：{0}", e.message));
       return this.scheduleReconnect();
@@ -137,6 +171,7 @@ export class Agent {
       sendJSON(ws, {
         t: "hello",
         deviceId: this.deviceId(),
+        instanceId: this.instanceId(),
         name: this.cfg.name || deviceName(),
         version: VERSION,
         host: p.hostname,
@@ -231,6 +266,15 @@ export class Agent {
       case "hello-ack":
         if (msg.build) this.offerBuild(msg.build);
         break;
+      case "rename-to": {
+        // Worker 发现这个 id 已被另一台设备占用，让本机自动改名
+        try {
+          await this.applyRename(msg.deviceId, null);
+        } catch (e) {
+          this.log(t("自动改名失败：{0}", e.message));
+        }
+        break;
+      }
       case "ping":
         this.lastPong = Date.now();
         try { sendJSON(this.ws, { t: "pong", now: Date.now() }); } catch { }
@@ -302,6 +346,10 @@ export class Agent {
       // 内部命令（不在工具清单里暴露，供 Worker 的 WebUI 使用）
       case "__sysinfo": return this.internalSysinfo();
       case "__logs": return this.internalLogs(args);
+      case "__rename_device": {
+        const r = await this.applyRename(args.deviceId, args.name);
+        return `已改名：${r.before} → ${r.after}${r.name ? " （显示名 " + r.name + "）" : ""}，正在重连`;
+      }
       default: throw new Error(t("未知工具：{0}", tool));
     }
   }

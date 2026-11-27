@@ -84,7 +84,7 @@ export class HubCore {
     if (!this.metaByWs) this.metaByWs = new WeakMap();
     let m = this.metaByWs.get(ws);
     if (!m) {
-      m = { lastSeen: null, name: null, version: null, host: null, os: null, distro: null, arch: null, tools: 0, connectedAt: null };
+      m = { lastSeen: null, name: null, version: null, host: null, os: null, distro: null, arch: null, tools: 0, connectedAt: null, instanceId: "" };
       this.metaByWs.set(ws, m);
     }
     return m;
@@ -94,9 +94,14 @@ export class HubCore {
     if (!msg || typeof msg !== "object") return;
     switch (msg.t) {
       case "hello": {
+        // hub.js 用这个钩子处理“同名不同机”的冲突；返回 false 表示这次连接已作废
+        const verdict = this.onHello ? this.onHello(ws, msg) : undefined;
+        if (verdict === false) break;
         const m = this.deviceMeta(ws);
-        if (typeof msg.deviceId === "string" && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(msg.deviceId)) {
-          this.deviceOf.set(ws, msg.deviceId);
+        m.instanceId = str(msg.instanceId, 32);
+        const wantId = typeof verdict === "string" ? verdict : msg.deviceId;
+        if (typeof wantId === "string" && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(wantId)) {
+          this.deviceOf.set(ws, wantId);
         }
         m.name = str(msg.name, 64) || "device";
         m.version = str(msg.version, 32);
@@ -241,6 +246,27 @@ export class HubCore {
 
   // ---------- 适配器注入 ----------
   setSockets(fn) { this._sockets = fn; }
+  // DO 休眠醒来后 metaByWs 是空的，用 attachment 里的信息补回来
+  hydrate(ws, att) {
+    if (!att || !att.deviceId) return;
+    const m = this.deviceMeta(ws);
+    if (att.instanceId) m.instanceId = att.instanceId;
+    if (att.name) m.name = att.name;
+    if (att.version) m.version = att.version;
+    if (att.host) m.host = att.host;
+    if (att.os) m.os = att.os;
+    if (att.distro) m.distro = att.distro;
+    if (att.arch) m.arch = att.arch;
+    if (att.tools) m.tools = att.tools;
+    if (att.connectedAt) m.connectedAt = att.connectedAt;
+    if (att.lastSeen) m.lastSeen = att.lastSeen;
+    this.deviceOf.set(ws, att.deviceId);
+  }
+
+  setOnHello(fn) {
+    this.onHello = fn;
+  }
+
   setSendFail(fn) { this._sendFail = fn; }
 }
 

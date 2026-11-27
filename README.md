@@ -335,6 +335,17 @@ tmcp admin-pass      # 输入留空 = 清除密码，下次访问重新引导
 
 **多设备**：所有工具都接受可选的 `device` 参数（设备 id）。不传则用默认设备。
 
+设备 id 默认由主机名派生，所以两台都叫 `localhost` 会撞车。现在有两道保护：
+
+1. **自动改名**：每份安装有一个随机指纹（`instanceId`）。当一台设备的 id 已被**另一台**设备占用时，
+   Worker 会让新来的自动换成 `localhost-2`、`localhost-3`……并写回它自己的配置，两台的连接互不干扰。
+   同一台机器重连（指纹相同）仍然直接顶掉旧连接，不会误改名。
+2. **手动改名**：WebUI 的设备卡片上有「改名」按钮，或者在设备上执行
+   ```bash
+   tmcp rename ubuntu-container "Ubuntu 容器"
+   ```
+   设备 id 只能用 `a-z 0-9 . _ -`，最长 64 位。改完设备会用新 id 重连，不影响 token。
+
 ```json
 { "name": "run_command", "arguments": { "command": "docker ps", "device": "debian-vps" } }
 ```
@@ -358,6 +369,7 @@ tmcp test            自检
 tmcp doctor          环境体检
 tmcp enroll [配置码]   用一次性配置码一键配置（码里含地址）
 tmcp lang [en|zh]    切换界面语言
+tmcp rename <id>     修改本机设备 id（多台同名设备时用）
 tmcp admin-pass      设置 / 重置后台登录密码
 tmcp token           查看 token
 tmcp token sync      从 Worker 拉回当前 token（WebUI 轮换后用）
