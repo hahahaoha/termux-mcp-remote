@@ -50,8 +50,11 @@ export class AgentHub {
     const existing = this.live.get(desired);
     if (existing && existing !== ws) {
       const old = this.core.deviceMeta(existing);
-      const sameMachine = !!(inst && old.instanceId && old.instanceId === inst);
-      if (sameMachine) {
+      // 两边都有指纹才敢判断。老版本 Agent 不上报 instanceId，
+      // 这时退回旧行为（顶掉旧的），避免它收到 rename-to 却不认识、反复重连。
+      const known = !!(inst && old.instanceId);
+      const sameMachine = known && old.instanceId === inst;
+      if (sameMachine || !known) {
         this.dead.add(existing);
         this.live.delete(desired);
         try { existing.close(4001, "replaced by a newer connection"); } catch { }
